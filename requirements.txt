@@ -1,0 +1,22 @@
+# conda create --name langchain_env
+# conda env list
+# conda activate langchain_env
+# python --version
+# conda install python=3.9
+# python -m ipykernel install --user --name langchain_env_kernel
+# jupyter notebook
+
+openai
+python-dotenv
+ipykernel
+jupyterlab
+notebook
+langchain
+langchain-openai
+langchain-core
+langchain-classic
+grandalf
+pypdf
+docx2txt
+langchain-community
+chromadb
