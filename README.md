@@ -1,8 +1,6 @@
 # LangChain Examples
 
-Practice notebooks and exercises from **The AI Agent Engineer Course: Complete AI Agent Bootcamp** on Udemy.
-
-**Course Learned:** [The AI Agent Engineer Course — Complete AI Agent Bootcamp](https://www.udemy.com/course/the-ai-engineer-course-complete-ai-engineer-bootcamp/)
+Practice notebooks and exercises from **Krish Naik's** Udemy courses, including LangChain examples from [The AI Agent Engineer Course — Complete AI Agent Bootcamp](https://blue.udemy.com/course/the-ai-agent-engineer-course-complete-ai-gent-bootcamp).
 
 ## Contents
 
