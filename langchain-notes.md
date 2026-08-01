@@ -30,6 +30,9 @@ client = OpenAI(api_key=os.environ["GROQ_API_KEY"], base_url="https://api.groq.c
 client = OpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url="https://openrouter.ai/api/v1")
 ```
 **Invocation (Non-Anthropic)**
+
+Every question we ask the model can be user or assistant question defined by the "role".
+
 ```
 response = client.chat.completions.create(
     model="gpt-4o-mini", **change to the model supported by respective provider**
@@ -143,4 +146,42 @@ for msg in tool_calls:
     tool_fun = tools[msg.function.name]
     arguments = msg.function.arguments
     tool_fun(**arguments)
+```
+For each response from tool_call we can pass that back to model as a assistant role question.
+```
+1st pass
+---------
+message (to model) -> [{'role': 'user', 'content': 'weather in tokyo'}] --> message1
+
+response (from model) -> 
+ChatCompletionMessage(
+  content=None, refusal=None, 
+  role='assistant', annotations=[], audio=None, 
+function_call=None, 
+tool_calls=[ChatCompletionMessageFunctionToolCall(id='call_DLFkn8JhjBQdGb1AzNSre4cH', function=Function(arguments='{"city":"Tokyo"}', name='get_weather'), 
+type='function')])
+
+**<perform tool call get_weather to get information from the tool>**
+
+2nd pass
+---------
+
+messages (to model)-> [
+{'role': 'user', 'content': 'weather in tokyo'}, -->message1
+{'role': 'assistant', 'content': None,  'tool_calls': [{'id': 'call_DLFkn8JhjBQdGb1AzNSre4cH', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{"city":"Tokyo"}'}}]}, --->message2
+ {'role': 'tool', 'tool_call_id': 'call_DLFkn8JhjBQdGb1AzNSre4cH', 'content': 'Tokyo: 22C, partly cloudy'} --->message3
+ ]
+
+response  (from model) -> ChatCompletionMessage(
+content='The current weather in Tokyo is 22°C and partly cloudy.', 
+refusal=None, 
+role='assistant', annotations=[], 
+audio=None, function_call=None, 
+tool_calls=None)
+
+**<no more tool calls agent stops and respond back with results >**
+
+Final stop: 
+Agent: The current weather in Tokyo is 22°C and partly cloudy.
+
 ```
