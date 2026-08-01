@@ -172,6 +172,7 @@ messages (to model)-> [
  {'role': 'tool', 'tool_call_id': 'call_DLFkn8JhjBQdGb1AzNSre4cH', 'content': 'Tokyo: 22C, partly cloudy'} --->message3
  ]
 
+<!- Model uses tool call response to general natural language answer ->
 response  (from model) -> ChatCompletionMessage(
 content='The current weather in Tokyo is 22°C and partly cloudy.', 
 refusal=None, 
@@ -181,7 +182,7 @@ tool_calls=None)
 
 **<no more tool calls agent stops and respond back with results >**
 
-Final stop: 
+Final answer: 
 Agent: The current weather in Tokyo is 22°C and partly cloudy.
 
 ```
