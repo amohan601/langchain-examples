@@ -186,3 +186,52 @@ Final answer:
 Agent: The current weather in Tokyo is 22°C and partly cloudy.
 
 ```
+## Agents
+
+Agent = LLM  + Tools + Memory
+
+### Agent frameworks
+* Langchain
+* Langgraph
+* OpenAI Agent SDK
+* Google ADK
+* AWS Strands
+* CrewAI
+* Llama Index
+* n8n
+* Langflow
+
+### Langchain Family
+Langchain is the Agent development framework
+Three things offered in langchain family are
+* Langchain 
+* Langgraph
+* Deep agents
+* Langsmith
+
+#### langchain
+
+  * latest version 1.3.13 v1 version or the latest version)
+  * langchain-classic is the older version package
+
+**What is Agent ? What is Harness ?**
+
+Agent = Model + Harness. Langchain provides the create_agent method that can help to create an agent that is minimal work but highly configurable. We can pass in the model, tools, memory and middleware the that shape the **create_agent** and agent will perform tool calling, looping and middleware execution based on this harness. 
+Harness is everything around the model loop - the prompt, the tools, the middleware and anything that define the agent behavior. We can define the power of model better using this harness thus making it a "Agent". 
+
+TBD: Langgraph and Deep agents to be explained later,
+
+Example of how differnt products are different 
+
+Deep agent - is like swiggy, you cannot do any deep control of food creation
+Langchain agent - home cooked meal some control is possible in recipe
+langgraph - just vegetables shared you get to cook everything more control 
+
+```
+from langchain.agents import create_agent
+
+agent = create_agent(
+    model = 'gpt-5.0-mini', 
+    tools =[get_weather], 
+    system_prompt = 'you are a helpful weather assistant' )
+```
