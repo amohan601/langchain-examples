@@ -1,4 +1,3 @@
-
 # KrishNaik AgenticAI 3.0 notes
 
 ### Langchain
@@ -289,33 +288,9 @@ uv add langchain-mcp-adapters langchain-chroma chromadb pypdf
 It creates .venv file, .env file, pyproject.toml file, README.md, and uv.lock files 
 
 
-### HumanMessage, SystemMessage
-```
-from langchain_core.messages import SystemMessage,HumanMessage
 
-agent.invoke(messages = [
-    SystemMessage(content = 'You are a pirate. Answer in pirate language'),
-    HumanMessage (content = 'what is the capital of france? ')
-])
-```
-Other variables with in response
-```
-print(response.content)
-print("text :                    ",response.text)
-print("content_blocks            ", response.content_blocks)
-print("id:                       ", response.id)
-print("tool_calls                ", response.tool_calls)
-```
-Output
-```
-Arrr, the capital o' France be Paris, matey!
-text :                     Arrr, the capital o' France be Paris, matey!
-content_blocks             [{'type': 'text', 'text': "Arrr, the capital o' France be Paris, matey!"}]
-id:                        lc_run--019f7395-602d-7e71-8ed7-89ec75573389-0
-tool_calls                 []
-```
 
-### AI Model providers
+### AI Model types
 #### Free
 * OpenRouter (contain free and paid models from different providers) (langchain-openrouter library)
 * Groq
@@ -342,4 +317,117 @@ model = init_chat_model(
     "openrouter:free",
     model_provider="openrouter",
 )
+```
+
+### Models
+```
+from langchain.chat_models import init_chat_model
+
+model = init_chat_model(
+    "claude-sonnet-4-6",
+    # Kwargs passed to the model:
+    temperature=0.7,
+    timeout=30,
+    max_tokens=1000,  --> define the max tokens we can receive in response
+    max_retries=6,  # Default; increase for unreliable networks
+)
+```
+### HumanMessage, SystemMessage to model 
+```
+from langchain_core.messages import SystemMessage,HumanMessage
+
+agent.invoke(messages = [
+    SystemMessage(content = 'You are a pirate. Answer in pirate language'),
+    HumanMessage (content = 'what is the capital of france? ')
+])
+```
+Other variables with in response
+```
+print(response.content)
+print("text :                    ",response.text)
+print("content_blocks            ", response.content_blocks)
+print("id:                       ", response.id)
+print("tool_calls                ", response.tool_calls)
+```
+Output
+```
+Arrr, the capital o' France be Paris, matey!
+text :                     Arrr, the capital o' France be Paris, matey!
+content_blocks             [{'type': 'text', 'text': "Arrr, the capital o' France be Paris, matey!"}]
+id:                        lc_run--019f7395-602d-7e71-8ed7-89ec75573389-0
+tool_calls                 []
+```
+
+#### Fewshot prompting to model 
+Give information to agent with examples in the form of system message, human message and ai message. Then Agent knows how to respond based on this example. 
+```
+from langchain_core.messages import HumanMessage,SystemMessage,AIMessage
+
+messages = [
+    SystemMessage("You are a helpful assistant"),
+    HumanMessage("Can you help me?"),
+    AIMessage("I'd be happy to help you with that question!"),
+
+    HumanMessage("Great! What's 2+2?"), --> This is my actual question.
+]
+response = model.invoke(messages)
+print(response.content)
+```
+Another way to give same thing
+
+```
+conversation = [
+    {"role": "system", "content": "You are a helpful assistant that translates English to French."}, --> SystemMessage
+    {"role": "user", "content": "Translate: I love programming."}, -->HumanMessage
+    {"role": "assistant", "content": "J'adore la programmation."}, -->AIMessage
+    {"role": "user", "content": "Translate: I love building applications."} -->HumanMessage (My question)
+]
+
+response = model.invoke(conversation)
+print(response)  # AIMessage("J'adore créer des applications.")
+
+```
+### Invoking the model
+* invoke (we already saw this - AIMessage output)
+* stream. (AIMessageChunk output)
+* batch (AIMessage output)
+
+#### Streaming with models 
+Stream the output content of a model that takes time to generate the full response so that it gives better user experience and when output is long or takes time to generate fully. if the model supports streaming, the output can be streamed.
+ model.invoke(), returns a single **AIMessage** after the model has finished generating its full response, model.stream() returns multiple **AIMessageChunk** objects, each containing a portion of the output text. 
+```
+for chunk in model.stream("Why do parrots have colorful feathers?"):
+    print(chunk.text, end="|", flush=True)
+```
+
+#### Batching with model
+Send multiple request to model in one batch to improve performance and reduce cost , as the processing can be done in parallel.
+Call the model using **model.batch()**
+```
+q1 = 'hi, how are you ?'
+q2 = 'tell about AI in less than 100 words?'
+q3 = 'Explain agents in 30 words ?'
+
+responses = openai_model.batch([
+    q1,
+    q2,
+    q3
+])
+
+for response in responses:
+  print(response)
+
+```
+
+#### Stream while batch is executed
+You can print the response while batch is generating output instead of waiting till the end.
+
+```
+ 
+for response in openai_model.batch_as_completed([
+    "Why do parrots have colorful feathers?",
+    "How do airplanes fly?",
+    "What is quantum computing?"
+]):
+    print(response)
 ```
