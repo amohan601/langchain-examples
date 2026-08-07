@@ -324,6 +324,18 @@ tool_calls                 []
 * Anthropic
 * Gemini
 
+#### Closed source
+We dont have information about weights, tuning etc
+* openrouter (has closed source models for free and paid)
+
+#### Open source
+We have information about details of model, we can download and run within our infra. 
+* Ollama (multiple models provided by Ollama)
+* Deepseek
+* LMStudio
+
+##### openrouter selecting a free model
+
 Below syntax will ensure openrouter will route this request to one of its free models. 
 ```
 model = init_chat_model(
