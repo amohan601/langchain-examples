@@ -19,6 +19,14 @@ Open/closed source models - Groq,Openrouter - some free models and some paid mod
 
 OpenAI came first. So other models api and contract are OpenAI
 
+**API Keys**
+
+Different providers expect their API KEY to be set up in the environment variable before they can be invoked
+* OPENAI_API_KEY
+* ANTHROPIC_API_KEY
+* GROQ_API_KEY
+* OPENROUTER_API_KEY
+
 **Invoke model**
 
 Invoke OpenAI model without any base URL. Same class can be used with base url for groq calling open ai model. we can invoke the model like below 
@@ -202,22 +210,23 @@ Agent = LLM  + Tools + Memory
 * Langflow
 
 ### Langchain Family
-Langchain is the Agent development framework
-Three things offered in langchain family are
-* Langchain 
-* Langgraph
-* Deep agents
-* Langsmith
+Langchain is an Agent development framework. Three things offered in langchain family are
+* Langchain - create agent with some base setup
+* Langgraph - foundation only create agents on your own
+* Deep agents - ready to use agents
+* Langsmith - monitoring,tracing, and tracking agents
 
 #### langchain
 
   * latest version 1.3.13 v1 version or the latest version)
-  * langchain-classic is the older version package
+  * langchain-classic is the older version package (prior to langchain 1.0)
 
 **What is Agent ? What is Harness ?**
 
 Agent = Model + Harness. Langchain provides the create_agent method that can help to create an agent that is minimal work but highly configurable. We can pass in the model, tools, memory and middleware the that shape the **create_agent** and agent will perform tool calling, looping and middleware execution based on this harness. 
 Harness is everything around the model loop - the prompt, the tools, the middleware and anything that define the agent behavior. We can define the power of model better using this harness thus making it a "Agent". 
+
+https://docs.langchain.com/oss/python/langchain/agents
 
 TBD: Langgraph and Deep agents to be explained later,
 
@@ -227,11 +236,98 @@ Deep agent - is like swiggy, you cannot do any deep control of food creation
 Langchain agent - home cooked meal some control is possible in recipe
 langgraph - just vegetables shared you get to cook everything more control 
 
+**Create Agent in Langgraph**
+
+It internally invokes the model with tool to get the tool call suggestion then it loops through the tool result to make tool call as python code and then it pass that result to model to form a natural language based result from the tool call response. 
 ```
 from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain.chat_models import init_chat_model
+
+@tool
+def get_weather(city: str) -> str:
+    """Define the weather for a city
+    """
+    return "It is sunny and 22F"
+
+model = init_chat_model(
+    "openai:gpt-5.5",
+    temperature=0.5,
+    timeout=300,
+    max_tokens=25000,
+)
 
 agent = create_agent(
-    model = 'gpt-5.0-mini', 
+    model = model,
     tools =[get_weather], 
     system_prompt = 'you are a helpful weather assistant' )
+
+result = agent.invoke({"messages": [{"role": "user", 
+                                    "content": "what is the weather in tokyo? "}]})
+
+ print(result["messages"][-1].content_blocks)                                   
+```
+* *Make sure to have the respective provider of the model OPENAI_API_KEY be set up as environment variable loaded using load_env* <br>
+* *Make sure to have respecticve provider library for langchain is also installed eg: langchain-openai* <br>
+* *Different providers will have slightly different format for init_chat_model creation*
+
+Result will have below <br>
+* HumanMessage <br>
+* AIMessage(with tool call info) <br>
+* ToolMessage(with tool call result)<br>
+* AIMessage(final message from model using tool call result)<br>
+
+### Setting up virtual environment
+Open a terminal  and run:
+```bash
+pip install uv (if uv does not exist)
+uv init langchain-course
+cd langchain-course
+uv add langchain langchain-openai langchain-community langgraph python-dotenv
+uv add langchain-mcp-adapters langchain-chroma chromadb pypdf
+```
+It creates .venv file, .env file, pyproject.toml file, README.md, and uv.lock files 
+
+
+### HumanMessage, SystemMessage
+```
+from langchain_core.messages import SystemMessage,HumanMessage
+
+agent.invoke(messages = [
+    SystemMessage(content = 'You are a pirate. Answer in pirate language'),
+    HumanMessage (content = 'what is the capital of france? ')
+])
+```
+Other variables with in response
+```
+print(response.content)
+print("text :                    ",response.text)
+print("content_blocks            ", response.content_blocks)
+print("id:                       ", response.id)
+print("tool_calls                ", response.tool_calls)
+```
+Output
+```
+Arrr, the capital o' France be Paris, matey!
+text :                     Arrr, the capital o' France be Paris, matey!
+content_blocks             [{'type': 'text', 'text': "Arrr, the capital o' France be Paris, matey!"}]
+id:                        lc_run--019f7395-602d-7e71-8ed7-89ec75573389-0
+tool_calls                 []
+```
+
+### AI Model providers
+#### Free
+* OpenRouter (contain free and paid models from different providers) (langchain-openrouter library)
+* Groq
+#### Paid
+* OpenAI
+* Anthropic
+* Gemini
+
+Below syntax will ensure openrouter will route this request to one of its free models. 
+```
+model = init_chat_model(
+    "openrouter:free",
+    model_provider="openrouter",
+)
 ```
