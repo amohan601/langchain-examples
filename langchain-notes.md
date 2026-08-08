@@ -1,3 +1,4 @@
+
 # KrishNaik AgenticAI 3.0 notes
 
 ### Langchain
@@ -430,4 +431,36 @@ for response in openai_model.batch_as_completed([
     "What is quantum computing?"
 ]):
     print(response)
+```
+
+#### Binding tools to model
+When a model decides it needs to call a tool, that request sits in the exact `.tool_calls`
+field from section 3.3 -- nothing runs yet, this is purely a *request*.
+Use **model.bind_tools** to bind these tools. The response is an AIMessage with .tool_calls section that suggest what tool we should call from the list of tools we provided. 
+```
+def get_weather(location: str) -> str:
+    """Get the weather at a location."""
+    return f"Sunny in {location}"
+
+def set_password(new_pass: str) -> str:
+    """Set a new password."""
+    return "Password changed"
+
+model_with_tools = model.bind_tools([get_weather, set_password])
+response = model_with_tools.invoke("Set the password to admin123")
+
+for tool_call in response.tool_calls:
+    print(f"Tool: {tool_call['name']}")
+    print(f"Args: {tool_call['args']}")
+    print(f"ID:   {tool_call['id']}")
+```
+
+#### Sending message to model (another way)
+```
+result = model.invoke([
+    SystemMessage("You are a helpful assistant"),
+    HumanMessage("Can you help me?"),
+    AIMessage("I'd be happy to help you with that question!"),
+    ToolMessage(content=<result_message_from_python_tool_call>, tool_call_id="call_123")
+])
 ```
