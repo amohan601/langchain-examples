@@ -1,7 +1,10 @@
 
 # KrishNaik AgenticAI 3.0 notes
 
-### Langchain
+## Langchain
+
+### Basics
+---
 
 Model - you ask question you get a answer
 
@@ -321,6 +324,8 @@ model = init_chat_model(
 ```
 
 ### Models
+---
+
 ```
 from langchain.chat_models import init_chat_model
 
@@ -333,7 +338,7 @@ model = init_chat_model(
     max_retries=6,  # Default; increase for unreliable networks
 )
 ```
-### HumanMessage, SystemMessage to model 
+#### HumanMessage, SystemMessage to model 
 ```
 from langchain_core.messages import SystemMessage,HumanMessage
 
@@ -464,3 +469,248 @@ result = model.invoke([
     ToolMessage(content=<result_message_from_python_tool_call>, tool_call_id="call_123")
 ])
 ```
+
+### Middleware 
+---
+* Helps to understand and control more tightly what happens inside the agent. 
+* Tracking agent behavior with logging, analytics, and debugging 
+* transforming prompts, tool selections, output formatting
+* adding retries, fallbacks, early termination logic
+* apply rate limit, guard rails, pii detection
+* we have option to do before_agent, before_model, after_agent, after_model setup, wrap_tool_call(before tool call), wrap_model_call
+* middle ware is one way to apply guard rails
+
+![Middleware diagram.](/middleware1.png "Middleware")
+
+* Pre-Built in middleware
+* Custom middleware
+
+Example of Pre-Built middleware from langchain (Called before tool call)
+
+#### Summarization middleware
+* **Summarization** - 	Automatically summarize conversation history when approaching token limits. <a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in#summarization">Summarization docs</a>
+
+
+```
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from langchain.messages import SystemMessage,HumanMessage
+from langchain.agents.middleware import SummarizationMiddleware
+
+@tool
+def book_movie(movie:str) -> str:
+    """book a movie """
+    print('[tool] Inside book_movie')
+    return f"the movie {movie} is booked"
+
+@tool
+def cancel_booking(movie:str) -> str:
+    """cancel a movie """
+    print('[tool] Inside cancel_booking')
+    return f"the movie {movie} is cancelled"
+    
+@tool
+def check_showtimes(movie_title:str) -> str:
+  """Check available showtimes for a movie at the cinema.
+
+  Args:
+      movie_title: The exact title of the movie to check
+  """
+  print('[tool] Inside check_showtimes')
+  fake_showtimes = {
+      "interstellar": "7:00 PM and 10:15 PM",
+      "dune part two": "9:30 PM only",
+      "oppenheimer": "Sold out for tonight",
+  }
+  return fake_showtimes.get(movie_title.lower(), "No showtimes found for that title.")
+
+agent = create_agent(
+    model='openai:gpt-5-mini',
+    tools=[book_movie,cancel_booking,check_showtimes],
+     middleware=[
+        SummarizationMiddleware(
+            model="gpt-5.4-mini",
+            trigger=("tokens", 50),
+            keep=("messages", 1),
+        )
+    ],
+    )
+
+print(agent.invoke({
+    "messages": [
+        SystemMessage(content="You are a cine bot assistant"),
+        HumanMessage(content="what time does interstellar run? can u book one movie for me?")
+    ]
+}))        
+```
+
+when agent is invoked with a question, depending on the trigger summarization kicks in. It summarizes the input to the model and sends the summarized HumanMessage to the model. The lc_source="summarization" in the HumanMessage indicates that summarization middleware was called. 
+Summarization Middleware is checked everytime before a model is called. It only kicks in if the trigger condition is met though. 
+
+```
+print(agent.invoke({
+    "messages": [
+        SystemMessage(content="You are a cine bot assistant"),
+        HumanMessage(content="what time does interstellar run? can u book one movie for me?")
+    ]
+}))
+```
+```
+Original conversation
+        ↓
+Summarization Middleware
+        ↓
+Compressed representation
+        ↓
+HumanMessage(lc_source="summarization")
+        ↓
+Model
+```
+Original message was 
+```
+[
+    SystemMessage(...),
+    HumanMessage("what time does interstellar run?..."),
+    AIMessage(...),
+    ToolMessage(...),
+    AIMessage(...)
+]
+```
+But what actually got is below
+```[
+    HumanMessage(
+        "Here is a summary of the conversation..." --> created with summarization middleware
+    ),
+
+    AIMessage(
+        content="",
+        tool_calls=[...] --> model response with suggestion about tools to call 
+    ),
+
+    ToolMessage(...),  --> tool response from the tool call
+
+    AIMessage(
+        content="Do you mean the movie's runtime..." --> models final response using the tool result
+    )
+]
+
+```
+
+The output of summarization middleware looks like below
+```
+SESSION INTENT
+The user wants to know the runtime of Interstellar
+and asks to book a movie ticket.
+
+SUMMARY
+The user asked:
+"what time does interstellar run?
+ can u book one movie for me?"
+
+Missing:
+- theater/location
+- date
+- showtime
+- booking preferences
+
+NEXT STEPS
+Ask for the missing booking details.
+
+Also clarify whether "what time" means:
+- movie runtime
+- movie showtimes
+```
+
+#### HITL middleware
+* Human-In-The-Loop - HITL Middleware
+It allows us to interrupt and get the user involved before the tool is called. 
+<a href="https://reference.langchain.com/python/langchain/agents/middleware/human_in_the_loop/HumanInTheLoopMiddleware">HITL Docs</a>
+```
+from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+def your_read_email_tool(email_id: str) -> str:
+    """Mock function to read an email by its ID."""
+    return f"Email content for ID: {email_id}"
+
+def your_send_email_tool(recipient: str, subject: str, body: str) -> str:
+    """Mock function to send an email."""
+    return f"Email sent to {recipient} with subject '{subject}'"
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[your_read_email_tool, your_send_email_tool],
+    checkpointer=InMemorySaver(),
+    middleware=[
+        HumanInTheLoopMiddleware(
+            interrupt_on={
+                "your_send_email_tool": {
+                    "allowed_decisions": ["approve", "edit", "reject"],
+                },
+                "your_read_email_tool": False,
+            }
+        ),
+    ],
+)
+
+config = {'configurable':{"thread_id":"hitl"}}
+result = agent.invoke({"messages" : [
+    ("user", "First call the Read email aj123@gmail.com and tell me the subject. Do not call send email until read email is completed. Next, Send an email to my manager on aj1234@gmail.com, asking for a leave, dont include any reason. its for today.")
+]},config = config)
+```
+The HITL middleware is invoked right before the tool is called and it generates an interrupt that we can see in the response AIMessage. 
+
+We can resume the interrupt using below. Note that since continiuty is needed in this conversation to resume after interrupt inmemorycheckpointer is needed. 
+```
+resumed_result = agent.invoke(Command(resume={"decisions":[{"type":"approve"}]}),config=config)
+```
+In the above example it will first give HumanMessage for our input request. Then it gives 
+AIMessage -> indicating read email tool call is needed. Then it gives ToolMessage for that call. Then it gives AIMessage for send email tool call needed. However this step also includes interrupt since HITL is specified for this tool. Once the above command is given to resume the full response will have ToolMessage for this tool call followed by the final message for send email tool call as AIMessage. 
+
+#### Model Call Limit
+* Model call limit - Limit the number of model calls to prevent excessive costs.
+
+ModelCallLimitMiddleware uses thread_limit which is across all conversations how many invoke(or model call) and run_limit is for a single conversation how many times invoke is allowed 
+```
+from langchain.agents.middleware import ModelCallLimitMiddleware
+call_limited_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=cinebot_tools,
+    checkpointer=InMemorySaver(),  # required for thread_limit to persist across calls
+    middleware=[
+        ModelCallLimitMiddleware( # low values taken just for example
+            thread_limit=5,   # across the WHOLE conversation
+            run_limit=2,       # per single .invoke() call
+            exit_behavior="end",  # graceful stop, not an exception
+        ),
+    ],
+)
+```
+
+### Model fallback middleware
+
+If the existing model invocation fails due to some error then we can plugin in model fallback middleware that can call another model to do the work. 
+
+```
+from langchain.agents.middleware import ModelFallbackMiddleware
+try:    
+    model_fallback_agent = create_agent(
+        model="openai:gpt-5-mini-test", --> this will fail
+        tools=[tell_story_movie,tell_story_book],
+    middleware=[
+        ModelFallbackMiddleware(
+            "openai:gpt-5-mini" -->the call will fallback to this model
+        ),
+    ],
+    )
+    #result = guarded_agent.invoke({"messages": [("user", "Please cancel booking BK1042")]}, config=config)
+    result = model_fallback_agent.invoke({"messages": [HumanMessage('Tell me the story of movie Dunn.')]})
+    print(result)
+except:
+    print('error')
+```
+
+### TollCallLimit Middleware
+* Tool call limit - Control tool execution by limiting call counts.
