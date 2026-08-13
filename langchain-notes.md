@@ -470,7 +470,7 @@ result = model.invoke([
 ])
 ```
 
-### Middleware 
+### Middleware (callbacks or hooks)
 ---
 * Helps to understand and control more tightly what happens inside the agent. 
 * Tracking agent behavior with logging, analytics, and debugging 
@@ -711,6 +711,82 @@ try:
 except:
     print('error')
 ```
+This is helpful especially when your provider/model has an outage or even intermittent issues this fallback is helpful. The context and everything is automatically passed on internally to the fallback model. You can provide a list of fallback models to ModelFallbackMiddleware so that it can be chained and whichever first successful fallback is used. 
 
 ### TollCallLimit Middleware
 * Tool call limit - Control tool execution by limiting call counts.
+some usecases are not allow many database queries - restrict it with a limit, or prevent certain actions in a flow after certain number of tries etc. 
+You specify this limit for all or specific tools. You set it up with either run limit or thread limit or both. 
+```
+@tool
+def create_booking(movie:str) ->str:
+    """create booking for a movie"""
+    return f"movie {movie} booked"
+
+@tool
+def cancel_booking(movie:str) ->str:
+    """cancel booking for a movie"""
+    return f"movie {movie} booking cancelled"
+
+tool_call_limit_agent = create_agent(
+    model="openai:gpt-5-mini",
+    checkpointer=InMemorySaver(),
+    tools=[create_booking,cancel_booking],
+    middleware=[
+        ToolCallLimitMiddleware(run_limit=2,thread_limit=4), -> applicable for all tools 
+        ToolCallLimitMiddleware(tool_name='cancel_booking', run_limit=1,thread_limit=1), --> applicable only for cancellation tool
+    ],
+)
+config = {"configurable": {"thread_id": "tool-limit-demo"}}
+tasks = ['create','cancel','cancel','create']
+from rich import print
+result = None
+for index,item in enumerate(tasks):
+    print('------------')
+    print(index,item)
+    result = tool_call_limit_agent.invoke({"messages" : [HumanMessage(content=f'{item} booking for movie with id B{index}')]},config = config)
+print(result)
+```
+* booking b0 to 'create' booking is called.
+* booking b1 to 'cancel' booking is called
+* booking b2 to 'cancel' booking is rejected because cancel_booking tool call has thread_limit = 1
+* booking b3 to 'create' booking is called. 
+
+#### PII Middleware
+
+we have multiple ways to implement guard rails. one of the ways is using pii middleware. using good system prompt is another way.
+
+```
+pii_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[create_booking,cancel_booking],
+    middleware=[
+        PIIMiddleware("email", strategy="redact", apply_to_input=True),
+        PIIMiddleware("credit_card", strategy="mask", apply_to_input=True),    ],
+)
+result = pii_agent.invoke({"messages" : [HumanMessage(content='Here is my booking id: b123. My email is aj123@gmail.com. here is my credit card number 4111-1111-1111-1234. please create booking for movie dunn')]})
+print(result)
+
+```
+it can apply that pii rule to the input data. only the applied/modified data goes into the model. 
+
+you can also apply custom masking for custom fields. in this example the custom id is masked based on regex rules. BK**** only will go into the model and tools. 
+
+```
+def detect_booking_code(content: str) -> list[dict]:
+    """Detect CineBot's own booking code format: BK followed by 4 digits."""
+    matches = []
+    for match in re.finditer(r"BK\d{4}", content):
+        matches.append({"text": match.group(0), "start": match.start(), "end": match.end()})
+    return matches
+    
+custom_pii_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[check_booking_status],
+    middleware=[PIIMiddleware("booking_code", detector=detect_booking_code, strategy="mask")],
+)
+
+result = custom_pii_agent.invoke({
+    "messages": [("user", "Can you check the status of my booking BK1044 for me?")]
+})
+```
