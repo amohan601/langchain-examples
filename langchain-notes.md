@@ -790,3 +790,295 @@ result = custom_pii_agent.invoke({
     "messages": [("user", "Can you check the status of my booking BK1044 for me?")]
 })
 ```
+
+#### To-do list middleware
+Helps to plan complex task. It gives a to-do list at the end. it creates a todo list as the output. 
+```
+@tool
+def check_show_timing() ->str:
+    """check show timing for all movies"""
+    return f"movie dunn is at 11:00, movie fearnot is at 5:00, movie interstellar is at 9:00"
+
+@tool
+def create_booking(movie:str, tickets: int) ->str:
+    """create booking for a movie"""
+    return f"movie {movie} is booked for {tickets} people"
+    
+@tool
+def cancel_booking(movie:str) ->str:
+    """cancel booking for a movie"""
+    return f"movie {movie} booking cancelled"
+
+    
+todo_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[check_show_timing, create_booking, cancel_booking],
+    middleware=[TodoListMiddleware()]
+)
+result = todo_agent.invoke({
+    "messages": [("user", "I want to plan a movie night: check what's showing, pick something good science related, and book 2 seats.")]
+})
+from rich import print
+print(result)
+```
+
+output has todo list like below. it will use tools and call tools as needed to prepare the list and the status. In this example it called check_show_timing and selected the movie from that info, then called create_booking and send that movie to book. we can see that in toolsmessage it passed the correct movie name and number of tickets to book in the create_booking call. 
+```
+'todos': [
+        {'content': 'Check show timings for all movies', 'status': 'completed'},
+        {'content': 'Select a science-related movie to watch (Interstellar at 9:00)', 'status': 'completed'},
+        {'content': 'Book 2 seats for chosen movie (Interstellar)', 'status': 'completed'},
+        {'content': 'Confirm booking details with user', 'status': 'in_progress'}
+    ]
+```
+### LLMToolSelectorMiddleware
+Uses an LLM to select relevant tools before calling the main model.
+we can define the max tool that it can send in addition to the always_include tools. 
+The tool is selected by the middleware based on the message in the invoke. 
+```
+tool_selector_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[check_show_timing, create_booking, cancel_booking,refund_booking,confirm_booking,confirm_cancellation],
+    middleware=[LLMToolSelectorMiddleware( 
+            model="openai:gpt-5-mini",     # can be a CHEAPER model than the main agent
+            max_tools=2, #only give two tools at any given time
+            always_include=["check_show_timing"]),
+               show_tools
+            ]
+)
+result = tool_selector_agent.invoke({
+    "messages": [HumanMessage(content="Can you cancel my booking with ID B1234?")]
+})
+```
+The model was sent first with 3 tools and model actually called cancel and confirm cancel tools. Once tools response was recieved from both tools using ToolsMessage then model formed the final response for that also middleware sent the 3 tools cancel, confirm cancel, check show timing. 
+TOOLS SENT TO MODEL:
+['cancel_booking', 'confirm_cancellation', 'check_show_timing']
+
+TOOLS SENT TO MODEL:
+['cancel_booking', 'confirm_cancellation', 'check_show_timing']
+
+### ToolErrorMiddleware 
+<a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in#tool-error-full-example">ToolError</a>
+Toolerror middleware can act on errors using the on_error method. if that method is called when tool throws exception, and it returns some result then agent.invoke will not throw any additional exception for the tool error. The response from on_error method is what becomes the ToolMessage for the tool call that failed, instead of agent throwing an exception. 
+
+```
+@tool
+def divide_into_half(num: int) ->int:
+    """this is a divide into half tool"""
+    print(f'[tool call] divide_into_half {num}')
+    return num/0
+    
+
+
+def on_error(exc: Exception, request: ToolCallRequest) -> str | None:
+    print(f'on_error {request.tool_call['name']}, failed with {type(exc).__name__}. ')
+    return f"`{request.tool_call['name']}` failed with {type(exc).__name__}."
+    # this returns helps to ensure the agent.invoke does not throw exception out of it and it exits gracefully. 
+
+
+agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[divide_into_half],
+    middleware=[ToolErrorMiddleware(on_error)],
+)
+try:
+    result = agent.invoke({"messages": [HumanMessage(content="Divide 5 into half")]})
+    from rich import print
+    print(result)
+except Exception as e:
+    print('error')
+```
+
+#### ToolRetryMiddleware
+Retry tool with exponential backoff and max retries. 
+
+Retry a tool call when failure happens. Can help to retry when there are network failures that causes the tool call to fail. 
+
+When tool call fails first time, it will go and do 3 retries based on ToolRetryMiddleware configuration. Upon exhausting all retries it will go to "error" state(on_failure ="error") and then it will throw exception causing ToolErrorMiddleware to kick in and capture the error inside on_error method. 
+```
+@tool
+def divide_into_half(num: int) ->int:
+    """this is a divide into half tool"""
+    print(f'[tool call] divide_into_half {num}')
+    if num == 0:
+        raise ValueError('number is zero')
+    return num/0
+    
+
+def on_error(exc: Exception, request: ToolCallRequest) -> str | None:
+    print(f'on_error {request.tool_call['name']}, failed with {type(exc).__name__}. ')
+    return "Make sure to give a non zero number" 
+    # propagate everything else
+
+agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[divide_into_half],
+    middleware=[ToolErrorMiddleware(on_error),
+                ToolRetryMiddleware(max_retries=3, on_failure="error")
+               ],
+)
+try:
+    result = agent.invoke({"messages": [HumanMessage(content="Divide 0 into half")]})
+    from rich import print
+    print(result)
+except Exception as e:
+    print('error')
+```
+Note the tool message produced. 
+```
+ToolMessage(
+            content='Make sure to give a non zero number',
+            name='divide_into_half',
+            id='27e232d0-cf87-40e7-aa57-ad95078a4899',
+            tool_call_id='call_ajxRaDheeJQUBoxI9Fcy0jlh',
+            status='error'
+        ),
+```
+Below output is produced. \
+ divide_into_half 0 \
+ divide_into_half 0 >>>retries \  
+ divide_into_half 0 >>>retries \
+ divide_into_half 0 >>>retries \
+on_error divide_into_half, failed with ValueError. >> got inside on_error method  
+
+Comparison of how order matters for toolerror and toolretry
+```
+count: int = 0;
+@tool
+def divide_into_half(num: int) ->int:
+    """this is a divide into half tool"""
+    global count
+    count+=1
+    print(f'[tool call] divide_into_half num = {num},  execution count = {count}')
+    
+    if num == 0:
+        raise ValueError('number is zero')
+    return num/0
+    
+
+def on_error(exc: Exception, request: ToolCallRequest) -> str | None:
+    print(f'on_error {request.tool_call['name']}, failed with {type(exc).__name__}. ')
+    return "Make sure to give a non zero number" 
+    # propagate everything else
+
+def on_error2(exc: Exception, request: ToolCallRequest) -> str | None:
+    print(f'on_error2 {request.tool_call['name']}, failed with {type(exc).__name__}. ')
+    raise ValueError('number is zero')
+    
+print('testing out toolerror and then toolretry middleware both together in that order')
+agent1 = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[divide_into_half],
+    middleware=[
+                ToolErrorMiddleware(on_error),
+                ToolRetryMiddleware(max_retries=5, on_failure="error")
+               ],
+)
+try:
+    result = agent1.invoke({"messages": [HumanMessage(content="Divide 0 into half")]})
+    from rich import print
+    #print(result)
+except Exception as e:
+    print('error')
+
+print('testing out toolretry and then toolerror middleware both together in that order')
+count = 0
+
+agent2 = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[divide_into_half],
+    middleware=[
+                ToolRetryMiddleware(max_retries=5, backoff_factor=2.0, initial_delay=1.0, on_failure="error"),
+                ToolErrorMiddleware(on_error),
+               ],
+)
+try:
+    result = agent2.invoke({"messages": [HumanMessage(content="Divide 0 into half.")]})
+    from rich import print
+    #print(result)
+except Exception as e:
+    print('error')
+
+print('testing out toolretry and then toolerror middleware both together in that order without error handling')
+count = 0
+
+agent3 = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[divide_into_half],
+    middleware=[
+                ToolRetryMiddleware(max_retries=5, backoff_factor=2.0, initial_delay=1.0, on_failure="error"),
+                ToolErrorMiddleware(on_error2),
+               ],
+)
+try:
+    result = agent3.invoke({"messages": [HumanMessage(content="Divide 0 into half.")]})
+    from rich import print
+    #print(result)
+except Exception as e:
+    print('error')
+```
+
+case 1 is like below
+```
+ToolErrorMiddleware
+    │
+    ▼
+ToolRetryMiddleware ->>> this catches the error and retries until 
+it exhausts the limit before it gives the control back to 
+toolerror middleware
+    │
+    ▼
+divide_into_half
+```
+case 2 is like below
+```
+ToolRetryMiddleware > 
+    │
+    ▼
+ToolErrorMiddleware >>>> when the tool executes first time, this middleware 
+capture the error and process it gracefully and exits. So there will not be any retries. 
+The error is no longer propagated upward. Instead, the error middleware has 
+transformed the exception into a successful tool result. if the error is not handled and thrown then it sends the control back to retry tool and it goes to next retry. 
+
+So from the retry middleware's perspective: 
+    │
+    ▼
+divide_into_half
+```
+#### LLMEmulatorMiddleware
+Emulate tool execution using an LLM for testing purposes, replacing actual tool calls with AI-generated responses. Default model is used by LLM Emulator internally, and we can specify which tools to be emulated. 
+
+```
+@tool
+def get_weather(location: str) -> str:
+    """Get the current weather for a location."""
+    print(f'[tool] get_weather {location}')
+    return f"Weather in {location}"
+
+@tool
+def send_email(to: str, subject: str, body: str) -> str:
+    """Send an email."""
+    print(f'[tool] send_email {to} {subject}  {body}')
+    return "Email sent"
+
+
+# Emulate all tools (default behavior)
+emulator_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[get_weather, send_email],
+    middleware=[LLMToolEmulator(model="openai:gpt-5-mini")]
+)
+
+# Emulate specific tools only
+emulator_agent2 = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[get_weather, send_email],
+    middleware=[LLMToolEmulator(model="openai:gpt-5-mini", tools=["get_weather"])],
+)
+result = emulator_agent.invoke({"messages": [HumanMessage(content="what is the weather in tokyo?.  send an email to aj123@gmail.com with subject langchain and body here is what we learned about middleware")]})
+from rich import print
+print(result)
+result = emulator_agent2.invoke({"messages": [HumanMessage(content="what is the weather in tokyo?.  send an email to aj123@gmail.com with subject langchain and body here is what we learned about middleware")]})
+print(result)
+```
+For the first agent, it emulates weather call tool. The send email tool is not emulated and actual call happens there. 
