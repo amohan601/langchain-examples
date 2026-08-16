@@ -470,7 +470,7 @@ result = model.invoke([
 ])
 ```
 
-### Middleware (callbacks or hooks)
+## Middleware (callbacks or hooks)
 ---
 * Helps to understand and control more tightly what happens inside the agent. 
 * Tracking agent behavior with logging, analytics, and debugging 
@@ -481,7 +481,8 @@ result = model.invoke([
 * middle ware is one way to apply guard rails
 
 ![Middleware diagram.](/middleware1.png "Middleware")
-
+Code for this section 
+<a href="langchain-middleware.ipynb">langchain-middleware.ipynb</a>
 * Pre-Built in middleware
 * Custom middleware
 
