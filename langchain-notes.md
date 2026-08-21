@@ -7,21 +7,21 @@
 ### Basics
 ---
 
-Model - you ask question you get a answer
+**Model** - you ask question you get a answer
 
-Chatbot - you pass all previous questions and answers and ask a new question. agent answers the new question keeping in mind the past coversation. conversation with some memory
+**Chatbot** - you pass all previous questions and answers and ask a new question. agent answers the new question keeping in mind the past coversation. conversation with some memory
 
-Agent - you can ask question and get answer, pass conversation, and also pass some tools for the agent to utilize for generating the answers. 
+**Agent** - you can ask question and get answer, pass conversation, and also pass some tools for the agent to utilize for generating the answers. 
 
 **Types of Models**
 
 You can use AI models to ask question. 
 
-Closed source models - OpenAI,Anthropic - You have to buy credits
+**Closed source models** - OpenAI,Anthropic - You have to buy credits
 
-Open/closed source models - Groq,Openrouter - some free models and some paid models
+**Open/closed source models** - Groq,Openrouter - some free models and some paid models
 
-OpenAI came first. So other models api and contract are OpenAI
+OpenAI came first. So other models api and contract are OpenAI compatible
 
 **API Keys**
 
@@ -118,7 +118,7 @@ get_tool_schema_for_llm={
 
 **model response with tool schema**
 ```
-If the question does not include asking about weather then model does not include tool_calls. 
+If the question we asked the model, does not include asking about weather, then model does not include tool_calls. 
 Otherwise it include tool_calls which tells us what tool we should call
 
 Example - 
@@ -148,7 +148,7 @@ name='get_weather'), type='function')]
 
 ```
 Once above response is recieved using that tool_name 'get_weather' we have to make
-actual python function call to get the tool response. Agent performs this tool call in a loop until there are no more tool calls needed. Depending on how many tools we provide and how many tools are needed to answer the question model may decide to include one or more tool details in the tool_calls response. 
+actual python function call to get the tool response. If we pass this question to an Agent it performs this tool call in a loop until there are no more tool calls needed. Depending on how many tools we provide and how many tools are needed to answer the question model may decide to include one or more tool details in the tool_calls response. 
 ```
 def get_weather(city: str) ->str:
     return f'Weather in {city} is Sunny 22F'
@@ -200,7 +200,7 @@ Agent: The current weather in Tokyo is 22°C and partly cloudy.
 ```
 ## Agents
 
-Agent = LLM  + Tools + Memory
+Agent = LLM(model)  + Tools + Memory
 
 ### Agent frameworks
 * Langchain
@@ -222,19 +222,19 @@ Langchain is an Agent development framework. Three things offered in langchain f
 
 #### langchain
 
-  * latest version 1.3.13 v1 version or the latest version)
+  * latest version 1.3.13 v1 version or the latest version
   * langchain-classic is the older version package (prior to langchain 1.0)
 
 **What is Agent ? What is Harness ?**
 
-Agent = Model + Harness. Langchain provides the create_agent method that can help to create an agent that is minimal work but highly configurable. We can pass in the model, tools, memory and middleware the that shape the **create_agent** and agent will perform tool calling, looping and middleware execution based on this harness. 
+Agent = Model + Harness. Langchain provides the create_agent method that can help to create an agent that is minimal work but highly configurable. We can pass in the model, tools, memory and middleware that shape the **create_agent** and agent will perform tool calling, looping and middleware execution based on this harness. 
 Harness is everything around the model loop - the prompt, the tools, the middleware and anything that define the agent behavior. We can define the power of model better using this harness thus making it a "Agent". 
 
 https://docs.langchain.com/oss/python/langchain/agents
 
 TBD: Langgraph and Deep agents to be explained later,
 
-Example of how differnt products are different 
+Example of how differnt products are different -
 
 Deep agent - is like swiggy, you cannot do any deep control of food creation
 Langchain agent - home cooked meal some control is possible in recipe
@@ -293,7 +293,7 @@ uv add langchain-mcp-adapters langchain-chroma chromadb pypdf
 It creates .venv file, .env file, pyproject.toml file, README.md, and uv.lock files 
 
 
-Dependencies needed
+Note the dependencies needed for all the material here. 
 ```
 requires-python = ">=3.12"
 dependencies = [
@@ -345,7 +345,7 @@ model = init_chat_model(
 )
 ```
 
-### Models
+## Working with the Models
 ---
 
 ```
@@ -364,7 +364,7 @@ model = init_chat_model(
 ```
 from langchain_core.messages import SystemMessage,HumanMessage
 
-agent.invoke(messages = [
+response = model.invoke(messages = [
     SystemMessage(content = 'You are a pirate. Answer in pirate language'),
     HumanMessage (content = 'what is the capital of france? ')
 ])
@@ -491,6 +491,11 @@ result = model.invoke([
     ToolMessage(content=<result_message_from_python_tool_call>, tool_call_id="call_123")
 ])
 ```
+## Structured Outputs
+TBD
+## Tools
+TBD
+
 
 ## Middleware (callbacks or hooks)
 ---
@@ -775,7 +780,7 @@ print(result)
 * booking b2 to 'cancel' booking is rejected because cancel_booking tool call has thread_limit = 1
 * booking b3 to 'create' booking is called. 
 
-#### PII Middleware
+### PII Middleware
 
 we have multiple ways to implement guard rails. one of the ways is using pii middleware. using good system prompt is another way.
 
@@ -814,7 +819,7 @@ result = custom_pii_agent.invoke({
 })
 ```
 
-#### To-do list middleware
+### To-do list middleware
 Helps to plan complex task. It gives a to-do list at the end. it creates a todo list as the output. 
 ```
 @tool
@@ -912,7 +917,7 @@ except Exception as e:
     print('error')
 ```
 
-#### ToolRetryMiddleware
+### ToolRetryMiddleware
 Retry tool with exponential backoff and max retries. 
 
 Retry a tool call when failure happens. Can help to retry when there are network failures that causes the tool call to fail. 
@@ -964,7 +969,7 @@ Below output is produced. \
  divide_into_half 0 >>>retries \
 on_error divide_into_half, failed with ValueError. >> got inside on_error method  
 
-Comparison of how order matters for toolerror and toolretry
+#### Comparison of how order matters for toolerror and toolretry
 ```
 count: int = 0;
 @tool
@@ -1061,14 +1066,16 @@ ToolRetryMiddleware >
 ToolErrorMiddleware >>>> when the tool executes first time, this middleware 
 capture the error and process it gracefully and exits. So there will not be any retries. 
 The error is no longer propagated upward. Instead, the error middleware has 
-transformed the exception into a successful tool result. if the error is not handled and thrown then it sends the control back to retry tool and it goes to next retry. 
+transformed the exception into a successful tool result. 
+On the otherhand, if the error is not handled and thrown then it sends 
+the control back to retry tool and it goes to next retry. 
 
 So from the retry middleware's perspective: 
     │
     ▼
 divide_into_half
 ```
-#### LLMEmulatorMiddleware
+### LLMEmulatorMiddleware
 Emulate tool execution using an LLM for testing purposes, replacing actual tool calls with AI-generated responses. Default model is used by LLM Emulator internally, and we can specify which tools to be emulated. 
 
 ```
@@ -1144,7 +1151,7 @@ tool_calls=[
 ```
 
 ## Custom Middleware
-You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. \
+You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. 
 
 #### Decorator middleware 
 
@@ -1196,7 +1203,7 @@ def dynamic_model_selection(request: ModelRequest, handler: Callable[[ModelReque
 Difference between @before_model vs @wrap_model_call  
 In @before_model we get the state and runtime. In @wrap_model_call we get the exact request. 
 
-#### Class based middleware
+### Class based middleware
 An extension of AgentMiddleware class with access to 3 attributes is a class based middleware. 
 When to use class based middleware:
 * both synch and async implementation of hooks needed
@@ -1265,7 +1272,7 @@ agent = create_agent(
 *  middleware1.after_agent()
 
 
-## Best practices
+## Best practices for middleware
 * Keep middleware focused - each should do one thing well
 * Handle errors gracefully - don’t let middleware errors crash the agent
 *  Use appropriate hook types:
