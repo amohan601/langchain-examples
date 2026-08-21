@@ -3,6 +3,7 @@
 
 ## Langchain
 
+
 ### Basics
 ---
 
@@ -292,8 +293,29 @@ uv add langchain-mcp-adapters langchain-chroma chromadb pypdf
 It creates .venv file, .env file, pyproject.toml file, README.md, and uv.lock files 
 
 
-
-
+Dependencies needed
+```
+requires-python = ">=3.12"
+dependencies = [
+    "deepagents>=0.6.12",
+    "jupyter>=1.1.1",
+    "lab>=8.10",
+    "langchain>=1.3.14",
+    "langchain-anthropic>=1.4.8",
+    "langchain-community>=0.4.2",
+    "langchain-mcp-adapters>=0.3.0",
+    "langchain-openai>=1.3.5",
+    "langchain-openrouter>=0.2.6",
+    "langchain-tavily>=0.2.18",
+    "langgraph>=1.2.9",
+    "openai>=2.45.0",
+    "pypdf>=6.14.2",
+    "python-dotenv>=1.2.2",
+    "requests>=2.34.2",
+    "rich>=15.0.0",
+    "streamlit>=1.59.1",
+]
+````
 ### AI Model types
 #### Free
 * OpenRouter (contain free and paid models from different providers) (langchain-openrouter library)
@@ -1083,3 +1105,173 @@ result = emulator_agent2.invoke({"messages": [HumanMessage(content="what is the 
 print(result)
 ```
 For the first agent, it emulates weather call tool. The send email tool is not emulated and actual call happens there. 
+
+### ShellToolMiddleware
+Helps the agent to access the machine in which agent is running to perform activities. For example to create a file, or execute automated tasks in terminal, docker etc where agent is running. ShellToolMiddleware itself does not call an LLM/model. Its job is to expose a shell/command-execution tool to the agent. We specify in the middleware the kind of permission the agent needs to run the process. If running this code in google collab, its basically running in collab server in the collab workspace. if running the code in local, then basically it executes the terminal commands in the local terminal. This will first have HumanMessage with our request, then it will create AIMessage with details about how its downloading, then ToolsMessage depending on it invokes a tool, it will also show the exact shell command in the AIMessage that it runs to perform the action. HostExecutionPolicy gives access to the agent to run on the machine where its currently setup. There is also DockerExecutionPolicy for docker based access. 
+```
+shell_tool_agent = create_agent(
+     model="anthropic:claude-sonnet-4-6",
+    middleware=[
+        ShellToolMiddleware(
+            workspace_root="langchain-shell-middleware-example",  # a real Colab path -- swap for /tmp/... if running elsewhere
+            execution_policy=HostExecutionPolicy(),
+        ),
+    ],
+ )
+
+result = shell_tool_agent.invoke({"messages": [HumanMessage(content="Create the recipe for a Pasta and save it in text file. ")]})
+from rich import print
+print(result)
+```
+See the tool call details it provided in AIMessage
+```
+ 'name': 'shell',
+                    'args': {
+                        'command': 'cat << \'EOF\' > 
+pasta_recipe.txt\n <RECIPE CONTENT HERE>"\nEOF\necho "Recipe saved successfully!'
+                    },
+                    'id': 'toolu_01GkXGqgyb1ZK92PSmiMUHfA',
+                    'type': 'tool_call'
+                }
+            ],
+tool_calls=[
+                {
+                    'name': 'shell',
+                    'args': {'command': 'cat pasta_recipe.txt'},
+                    'id': 'toolu_01D9grou82DhUA9kZBUtpagB',
+                    'type': 'tool_call'
+                }
+```
+
+## Custom Middleware
+You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. \
+
+#### Decorator middleware 
+
+Node-style (Decorator Middleware):
+* @before_agent - Runs before agent starts (once per invocation)
+* @before_model - Runs before each model call
+* @after_model - Runs after each model response
+* @after_agent - Runs after agent completes (once per invocation)\
+
+Wrap-style (Decorator middleware):
+* @wrap_model_call - Wraps each model call with custom logic
+* @wrap_tool_call - Wraps each tool call with custom logic
+
+Node-style for sequential logic (logging, validation)
+Wrap-style for control flow (retry, fallback, caching)
+
+
+When to use decorators:
+* Single hook needed
+* No complex configuration
+* Quick prototyping
+
+
+Middleware can change the state of an change with the help of these hooks. Example we can change the model dynamically with @wrap_model_call hook where based on custom condition we can pass a different model to the agent state. Example for @wrap_model_call is to set up a advanced model for certain criteria like below. Wrap model call can also help dynamic tool selection based on logic.
+
+```
+@wrap_model_call
+def select_tools(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    """Middleware to select relevant tools based on state/context."""
+    # Select a small, relevant subset of tools based on state/context
+    relevant_tools = select_relevant_tools(request.state, request.runtime)
+    return handler(request.override(tools=relevant_tools))
+```
+
+```
+advanced_model = init_chat_model("anthropic:claude-sonnet-4-6")
+basic_model = init_chat_model("anthropic:claude-haiku-4-5-20251001")
+
+@wrap_model_call
+def dynamic_model_selection(request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]) -> ModelResponse:
+    """Use a cheap model for short conversations, a capable one once it gets complex."""
+    message_count = len(request.state["messages"])
+    chosen_model = advanced_model if message_count > 10 else basic_model
+    return handler(request.override(model=chosen_model))
+```
+Difference between @before_model vs @wrap_model_call  
+In @before_model we get the state and runtime. In @wrap_model_call we get the exact request. 
+
+#### Class based middleware
+An extension of AgentMiddleware class with access to 3 attributes is a class based middleware. 
+When to use class based middleware:
+* both synch and async implementation of hooks needed
+* Multiple hooks needed in a single middleware
+* Complex configuration required (e.g., configurable thresholds, custom models)
+* Reuse across projects with init-time configuration
+
+Example like below 
+
+```
+class CallCounterMiddleware(AgentMiddleware):
+
+    def __init__(self,warn_after: int =1):
+        self._num_calls = 0
+        self.warn_after = warn_after
+
+    def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        self._num_calls+=1
+        print(f"About to call model with {len(state['messages'])} messages  no of calls = {self._num_calls}")
+        if(self._num_calls > self.warn_after):
+            print(f"Lot of calls...")
+        return None
+
+@tool
+def get_weather(city:str):
+    """returns the weather of a city"""
+    return "currently it is sunny and 22F"
+    
+logged_agent = create_agent(model="anthropic:claude-sonnet-4-6", 
+                            tools=[get_weather], 
+                            middleware=[CallCounterMiddleware()])
+
+result = logged_agent.invoke({"messages": [("user", "What is the weather in tokyo today? ")]})
+```
+
+#### Execution order of multiple middleware decorators
+When using multiple middleware, understand how they execute:
+```
+agent = create_agent(
+    model="gpt-5.5",
+    middleware=[middleware1, middleware2, middleware3],
+    tools=[...],
+)
+```
+#### Before hooks run in order: 
+*  middleware1.before_agent() 
+*  middleware2.before_agent()
+*  middleware3.before_agent() 
+
+#### Agent loop starts \
+*  middleware1.before_model()
+*  middleware2.before_model()
+*  middleware3.before_model() 
+
+#### Wrap hooks nest like function calls: 
+*  middleware1.wrap_model_call() → middleware2.wrap_model_call() → middleware3.wrap_model_call() → model 
+
+#### After hooks run in reverse order: 
+*  middleware3.after_model()
+*  middleware2.after_model()
+*  middleware1.after_model() 
+
+#### Agent loop ends
+*  middleware3.after_agent()
+*  middleware2.after_agent()
+*  middleware1.after_agent()
+
+
+## Best practices
+* Keep middleware focused - each should do one thing well
+* Handle errors gracefully - don’t let middleware errors crash the agent
+*  Use appropriate hook types:
+   * Node-style for sequential logic (logging, validation)
+   * Wrap-style for control flow (retry, fallback, caching)
+* Clearly document any custom state properties
+* Unit test middleware independently before integrating
+* Consider execution order - place critical middleware first in the list
+* Use built-in middleware when possible
