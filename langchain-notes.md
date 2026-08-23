@@ -507,7 +507,7 @@ TBD
 * we have option to do before_agent, before_model, after_agent, after_model setup, wrap_tool_call(before tool call), wrap_model_call
 * middle ware is one way to apply guard rails
 
-![Middleware diagram.](/middleware1.png "Middleware")
+![Middleware diagram.](middleware1.png "Middleware")
 Code for this section 
 <a href="langchain-middleware.ipynb" target="_blank">langchain-middleware.ipynb</a>
 * Pre-Built in middleware
@@ -1153,7 +1153,7 @@ tool_calls=[
 ## Custom Middleware
 You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. 
 
-![Middleware diagram.](/customer-middleware1.png "Custom Middleware")
+![Middleware diagram.](customer-middleware1.png "Custom Middleware")
 
 #### Decorator middleware 
 
@@ -1361,7 +1361,7 @@ result = agent_with_context.invoke(
 #### ToolRuntime
 The runtime from agent is passed on to Tools as ToolsRuntime
 
-![Tool Runtime diagram.](/tool-runtime.png "Tool Runtime")
+![Tool Runtime diagram.](tool-runtime.png "Tool Runtime")
 It will have Runtime fields + some additional info below
 * **state** - short term memory with mutable data that is available for current invocation
 * **Tool Call ID** - Unique identifier for the current tool invocation
@@ -1437,7 +1437,7 @@ def my_hook(request, handler):
 ```
 So yes: both styles can work with state and runtime. The key difference is that node-style hooks receive them directly, while wrap-style hooks receive a request object that carries the execution information.
 
-![Runtime diagram.](/runtime.png "Runtime")
+![Runtime diagram.](runtime.png "Runtime")
 
 * State and Runtime are two items
 * State schema -> AgentState implementation
