@@ -509,14 +509,14 @@ TBD
 
 ![Middleware diagram.](/middleware1.png "Middleware")
 Code for this section 
-<a href="langchain-middleware.ipynb">langchain-middleware.ipynb</a>
+<a href="langchain-middleware.ipynb" target="_blank">langchain-middleware.ipynb</a>
 * Pre-Built in middleware
 * Custom middleware
 
 Example of Pre-Built middleware from langchain (Called before tool call)
 
 #### Summarization middleware
-* **Summarization** - 	Automatically summarize conversation history when approaching token limits. <a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in#summarization">Summarization docs</a>
+* **Summarization** - 	Automatically summarize conversation history when approaching token limits. <a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in#summarization" target="_blank">Summarization docs</a>
 
 
 ```
@@ -1153,6 +1153,8 @@ tool_calls=[
 ## Custom Middleware
 You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. 
 
+![Middleware diagram.](/customer-middleware1.png "Custom Middleware")
+
 #### Decorator middleware 
 
 Node-style (Decorator Middleware):
@@ -1282,3 +1284,208 @@ agent = create_agent(
 * Unit test middleware independently before integrating
 * Consider execution order - place critical middleware first in the list
 * Use built-in middleware when possible
+
+
+## Agent State and Runtime
+
+<a href="https://colab.research.google.com/drive/1dFuLlELzyS2NDIBgeVOowrqGJGFPERSL?usp=sharing" target="_blank">Agent Runtime colab </a> 
+
+
+### Agent State
+<a href="https://docs.langchain.com/oss/python/langchain/agents#agent-state" target="_blank">Agent State docs</a> 
+
+Every agent manages its execution context through "AgentState"  a typed dictionary that holds current conversation history and any custom fields your tools and middleware need.
+
+It contains messages of type list[BaseMessage] - The full conversation history for the current thread. Append-only: new messages are added, never replaced. 
+
+In node style decorator middlewares it gets the state through this AgentState. Hooks receive the current state and can return a dict of updates to merge back into it.
+```
+@before_model
+def log_before_model(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+```
+We can extend AgentState and have custom state with additional information.
+```
+from langchain.agents import create_agent, AgentState
+
+class MyState(AgentState):
+    user_id: str
+    call_count: int
+
+agent = create_agent(
+    model="google_genai:gemini-3.6-flash",
+    tools=[],
+    state_schema=MyState,  >>> See how the custom state is passed to the agent. 
+)
+```
+### InMemoryStore vs InMemoryPreferences vs InMemorySaver
+
+* **InMemoryStore** - Arbitrary data/memories , Across threads (different conversations), Long-term application/user memory - "What information should I remember beyond this conversation?" - More key/value pair style data 
+
+* **InMemoryPreferences** - User preferences , Across threads, Remember preferences/settings - "What does this user prefer?" - More preference oriented for user style record
+
+* **InMemorySaver** - checkpointer, One thread , Resume and persist execution state - "Where was the agent in this conversation?" > use to resume agent 
+
+### Agent Runtime
+<a href="https://docs.langchain.com/oss/python/langchain/runtime" target="_blank">Agent Runtime docs</a> 
+
+LangChain’s create_agent runs on LangGraph’s runtime under the hood. It contains information needed for the agent during the runtime. Runtime is that info that is used by agent but is not in conversation history. Example additional ifnormation needed for agent to make tools or middleware logic decision etc. Some information about the user etc. 
+
+Runtime contains following information - 
+* **context** - static information used for agent invocation (Eg: user id, db conn etc)
+* **store** - BaseStore instance used for long term memory (Eg: InMemoryStore)
+* **Stream writer** - an object used for streaming information via the "custom" stream mode
+* **Execution info** -  identity and retry information for the current execution (thread ID, run ID, attempt number)
+* **Server info** -  server-specific metadata when running on LangGraph Server (assistant ID, graph ID, authenticated user) (Useful more in langgraph context)
+
+```
+from langchain.tools import tool as tool_rt, ToolRuntime
+from dataclasses import dataclass
+
+@dataclass
+class CineBotContext:
+  user_name:str
+  #geo_state:str # Delhi or Bangalore or Chennai
+
+agent_with_context = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[],
+    context_schema=CineBotContext,   # declares the SHAPE of context this agent expects
+)
+result = agent_with_context.invoke(
+    {"messages": [{"role": "user", "content": "What's my name?"}]},
+    context=CineBotContext(user_name="Priya"),   # agent context injected at runtime
+)
+```
+
+#### ToolRuntime
+The runtime from agent is passed on to Tools as ToolsRuntime
+
+![Tool Runtime diagram.](/tool-runtime.png "Tool Runtime")
+It will have Runtime fields + some additional info below
+* **state** - short term memory with mutable data that is available for current invocation
+* **Tool Call ID** - Unique identifier for the current tool invocation
+
+```
+from langgraph.store.memory import InMemoryStore
+
+loyalty_store=InMemoryStore()
+
+@dataclass
+class CustomerContext:
+  user_id:str
+
+## Note the ToolRuntime passed into the tool. This has access to context, store etc. 
+@tool
+def fetch_customer_preferences(runtime: ToolRuntime[CustomerContext])-> str:
+  "Feth the customer's Saved Preferences from a long term Memory"
+  user_id=runtime.context.user_id
+  preferences = "No Preferences"
+
+  if runtime.store:
+    if memory := runtime.store.get(('users'),user_id): >> users is a
+      preferences = memory.value['preferences']
+
+  return preferences
+
+pref_agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[fetch_customer_preferences],
+    context_schema=CustomerContext,  -->set up context 
+    store=loyalty_store,  --> set up store
+)
+```
+We can use below two to add and retrieve from store
+```
+runtime.store.get(('users'),user_id)
+runtime.store.put( ("users"), user_id,data)
+runtime.context.user_id >> for specific content info
+```
+When invoking the agent inject dynamic context like below to retrieve information about that context. 
+```
+result = pref_agent.invoke(
+        {"messages": [{"role": "user", "content": "What's my fav movie?"}]},
+        context=MyCustomerContext(user_id="aj123"),   # injected at invocation time
+)
+```
+One-line memory trick
+
+State = "What is happening?"
+
+Context = "Who/what am I running for?"
+
+Store = "What do I remember?"
+
+Checkpointer = "Where did I leave off?"
+
+#### Middleware runtime
+
+Node style hooks get the runtime like below
+```
+@before_model
+def my_hook(state, runtime):
+    print(state)
+    print(runtime)
+```
+Wrap style hooks get the runtime like below
+```
+@wrap_model_call
+def my_hook(request, handler):
+
+    state = request.state
+    runtime = request.runtime
+```
+So yes: both styles can work with state and runtime. The key difference is that node-style hooks receive them directly, while wrap-style hooks receive a request object that carries the execution information.
+
+![Runtime diagram.](/runtime.png "Runtime")
+
+* State and Runtime are two items
+* State schema -> AgentState implementation
+* Context schema -> @dataclass decorator
+* store = InMemoryStore
+* checkpointer = InMemorySaver()
+* Set create_agent with context_schema, state_schema, store, checkpointer as needed
+* In the invoke pass the  context=MyCustomerContext(<field_name>=<dynamic_value>), state is passed inside array where messages are also present as dictionary item with values
+* Inside Tools access runtime as ToolsRuntime > [runtime.state, runtime.context, runtime.store etc]
+* In node style hooks, state and runtime are available as variable
+* In wrap style hooks, request.state and request.runtime has the same information 
+
+### Dynamic prompting
+dynamic prompt is a middleware to help personalize the prompt. 
+@dynamic_prompt decorator is used to create dynamic prompt that has access to request object. This is then passed on as a middleware. Dynamic prompt that is returned is internally used by the model to set up the behavior. 
+```
+@dynamic_prompt
+def weather_prompt(request):
+    country = request.runtime.context.country
+
+    print(" DYNAMIC PROMPT EXECUTED")
+    print("country =", country)
+
+    if country == "US":
+        prompt = (
+            "You are a weather assistant. "
+            "Report temperatures in Fahrenheit."
+        )
+    else:
+        prompt = (
+            "You are a weather assistant. "
+            "Report temperatures in Celsius."
+        )
+
+    print("prompt =", prompt)
+
+    return prompt
+
+agent = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[get_weather],
+    context_schema=WeatherContext,
+    middleware=[weather_prompt],
+)
+
+result = agent.invoke({"messages": [("user", "what is the weather in tokyo ? ")]},context = WeatherContext(country= "US"))
+```
+Based on the prompt with context country passed in it will give either one of below
+content="Currently in Tokyo it's 75°F. Would you like additional details (forecast, humidity, wind, etc.)?"   
+
+content='The current temperature in Tokyo is about 24°C (the source reported 75°F, which converts to ≈24°C). 
+Would you like more details (conditions, humidity, wind, or a forecast)?',
