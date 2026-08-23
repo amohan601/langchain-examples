@@ -1290,6 +1290,7 @@ agent = create_agent(
 
 <a href="https://colab.research.google.com/drive/1dFuLlELzyS2NDIBgeVOowrqGJGFPERSL?usp=sharing" target="_blank">Agent Runtime colab </a> 
 
+<a href="langchain-agentstate-runtime.ipynb" target="_blank">Code example created</a> 
 
 ### Agent State
 <a href="https://docs.langchain.com/oss/python/langchain/agents#agent-state" target="_blank">Agent State docs</a> 
