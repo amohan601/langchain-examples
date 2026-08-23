@@ -1361,7 +1361,7 @@ result = agent_with_context.invoke(
 #### ToolRuntime
 The runtime from agent is passed on to Tools as ToolsRuntime
 
-![Tool Runtime diagram.](tool-runtime.png "Tool Runtime")
+![Tool Runtime diagram.](toolruntime.png "Tool Runtime")
 It will have Runtime fields + some additional info below
 * **state** - short term memory with mutable data that is available for current invocation
 * **Tool Call ID** - Unique identifier for the current tool invocation
