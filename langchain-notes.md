@@ -1490,3 +1490,74 @@ content="Currently in Tokyo it's 75°F. Would you like additional details (forec
 
 content='The current temperature in Tokyo is about 24°C (the source reported 75°F, which converts to ≈24°C). 
 Would you like more details (conditions, humidity, wind, or a forecast)?',
+
+## Human-In-The-Loop (middleware) post interruption resume
+
+<a href="https://docs.langchain.com/oss/python/langchain/human-in-the-loop" target="_blank">Human In the loop Docs</a>
+
+Agent is created with HITL middleware and define the actions for each tool call like below.
+
+```
+    middleware=[
+        HumanInTheLoopMiddleware(
+            interrupt_on={
+                "cancel_booking": True,               # all four decisions allowed (default config)
+                "send_booking_confirmation": False,    # safe operation, auto-approved, never pauses
+            },
+            description_prefix="CineBot action pending your approval",
+        ),
+    ],
+```
+We can invoke the agent using below style that results a GraphOutput type object with interrupts set up if interrupted. 
+```
+result = agent.invoke(
+    {"messages": [("user", "Cancel booking BK1042")]},
+    config=config,
+    version="v2",   # the current, recommended invoke pattern for reading interrupts
+)
+```
+We can then invoke the agent again with approve or reject action. Allowed actions are approve,edit,reject,respond. Having the same config helps to continue the conversation as if interrupt is continue. The decision of interrupt helps the model to decide if it need to make a tool call that it identified or not. You are effectively telling the middleware:Human: "No. Do not execute this tool call." The InmemorySaver with config thread helps to maintain previous conversation that is useful when you invoke again using command for next steps. 
+```
+result = agent.invoke(
+    Command(resume={"decisions": [{"type": "reject"}]}),
+    config=config, # Same thread ID to resume the paused conversation
+    version="v2",
+)
+```
+when using respond action decision, the message in the response is passed as ToolMessage response to the model so that it can build AIMessage based on that. In the case of edit action, it passed the edited decision message to tool_call as argument, and tool call happened. 
+| Decision | What you are saying | Tool executes? |
+|---|---|---|
+| `respond` | "Don't execute the tool. Here's information/instructions from me instead." | ❌ No |
+| `edit` | "Change the tool call's arguments, then execute it." | ✅ Yes |
+
+![HITL Decision diagram.](hitl-decision.png "HITL Decision")
+
+#### Conditional interrupts in HITL
+
+By default, every tool call listed in interrupt_on pauses for review. To pause only some calls, add a when predicate to a tool’s InterruptOnConfig. The predicate receives a ToolCallRequest and returns True to interrupt or False to auto-approve, so you can take the tool’s arguments.
+Pass a condition check method to the interrupt predicate like below
+```
+@tool
+def cancel_booking(bookingid: str, amount: int) -> str:
+    """cancel booking"""
+    return f"booking for {amount} cancelled {bookingid}" 
+
+    
+def too_large_amount(request: ToolCallRequest) -> bool:
+    """Pause writes to paths outside the workspace directory."""
+    amount = request.tool_call["args"].get("amount", "")
+    return amount > 50 #interrupted only for $50 or move request
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[cancel_booking],
+    middleware=[HumanInTheLoopMiddleware(interrupt_on={ "cancel_booking": {
+                    "allowed_decisions": ["approve", "edit", "reject"],
+                    "when": too_large_amount,
+                }
+            },
+        ),
+    ]
+)
+```
+Now in your invoke request if you pass any amount $50 or more it will trigger interrupt flow otherwise it will go through normal flow.
