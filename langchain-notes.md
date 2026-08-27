@@ -1450,6 +1450,10 @@ So yes: both styles can work with state and runtime. The key difference is that 
 * In node style hooks, state and runtime are available as variable
 * In wrap style hooks, request.state and request.runtime has the same information 
 
+
+![State vs Context diagram.](state_context_diff.png "State-Context-Difference")
+
+
 ### Dynamic prompting
 dynamic prompt is a middleware to help personalize the prompt. 
 @dynamic_prompt decorator is used to create dynamic prompt that has access to request object. This is then passed on as a middleware. Dynamic prompt that is returned is internally used by the model to set up the behavior. 
@@ -1560,4 +1564,4 @@ agent = create_agent(
     ]
 )
 ```
-Now in your invoke request if you pass any amount $50 or more it will trigger interrupt flow otherwise it will go through normal flow.
+Now in your invoke request if you pass any amount $50 othisr more it will trigger interrupt flow otherwise it will go through normal flow. 
