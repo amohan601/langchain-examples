@@ -1,5 +1,4 @@
 
-
 # Krish naik AgenticAI 3.0 Notes
 
 ### MCP (Model context protocol)
@@ -29,7 +28,6 @@ MCP is just a shared toolbox — a standard-shaped collection of tools and APIs 
 * Server calls the real API
 * Result flow all the way back to the client 
 
-![Host-Client-Server diagram.](mcp-host-client-server.png "MCP Host-Client-Server")
 
 When the claude desktop starts up it sends initialization message to each connector it is set up to connect to. In MCP world, there is a single host used with multiple clients to connect to multiple connector. 
 
@@ -50,5 +48,8 @@ Transport layer: client and server speak JSON-RPC 2.0, not plain REST. Two trans
 **More notes from Mayank**
 
 <a href="https://github.com/mayank953/Live-Class-2026/blob/main/classes_summary/16%20-%2023%20Aug%20-%20MCP%20Introduction.md" target="_blank">MCP-Host-Client-Server</a>
+
+
+![Host-Client-Server diagram.](mcp-host-client-server.png "MCP Host-Client-Server")
 
 MCP Server contains tools, resources, prompts.
