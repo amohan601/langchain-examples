@@ -1,4 +1,5 @@
 
+
 # Krish naik AgenticAI 3.0 Notes
 
 ### MCP (Model context protocol)
