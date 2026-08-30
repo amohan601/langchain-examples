@@ -1,10 +1,7 @@
 
-# KrishNaik AgenticAI 3.0 notes
+# KrishNaik AgenticAI 3.0 Langchain notes
 
-## Langchain
-
-
-### Basics
+## Langchain Basics
 ---
 
 **Model** - you ask question you get a answer
@@ -220,7 +217,7 @@ Langchain is an Agent development framework. Three things offered in langchain f
 * Deep agents - ready to use agents
 * Langsmith - monitoring,tracing, and tracking agents
 
-#### langchain
+### langchain
 
   * latest version 1.3.13 v1 version or the latest version
   * langchain-classic is the older version package (prior to langchain 1.0)
@@ -315,11 +312,14 @@ dependencies = [
     "rich>=15.0.0",
     "streamlit>=1.59.1",
 ]
-````
+```
+
 ### AI Model types
+
 #### Free
 * OpenRouter (contain free and paid models from different providers) (langchain-openrouter library)
 * Groq
+
 #### Paid
 * OpenAI
 * Anthropic
@@ -335,7 +335,7 @@ We have information about details of model, we can download and run within our i
 * Deepseek
 * LMStudio
 
-##### openrouter selecting a free model
+#### openrouter selecting a free model
 
 Below syntax will ensure openrouter will route this request to one of its free models. 
 ```
@@ -498,7 +498,9 @@ Code for this section <a href="langchain-structured-schema.ipynb" target="_blank
 ### Structured Output Schema 
 
 To get a structured standardized response from model based on our requirements we can use 
-structured output response format.
+structured output response format. 
+
+Structured output exists at TWO levels: raw model (with_structured_output) and agent (response_format on create_agent) — the agent-level version is what the rest of this course actually uses, because it coexists with tools.
 
 We define a  class extended from pydantic Basemodel with the field defining the schema for our response format. The description is given using pydantic Field type. Then invoke the model using model.with_structured_output(BookingRequest) the class name for our schema. 
 ```
@@ -646,7 +648,166 @@ Callable[[Exception], str]: Custom function that returns error message
 False: No retry, let exceptions propagate
 ```
 ## Tools
-TBD
+<a href="langchain-tools.ipynb" target="_blank">Tools code doc</a>
+
+You can attach tool to model. Tool is a function with optional arguments and optional return type defined with @tool. Docstring is needed for model to understand the description of tool. Tool -> Args with type hints. Tools are just glorified Functions/API Calls. Any time agent has to talk to outside things then we can use tools. You can overwrite name using @tool("mycustomname",description="my custom description") especially useful if someone else created tool and you are using it. 
+```
+
+from langchain_core.tools import tool
+
+@tool
+def get_weather(location:str) -> str:
+  """Return weather details """
+  return f"Weather in {location} is 22F Sunny"
+```
+Langchain has built in tools as well example tavily search tool for websearch. You need to do below. TAVILY_API_KEY is needed to perform this. 
+```
+pip install langchain-tavily
+
+from langchain_tavily import TavilySearch
+
+search_tool = TavilySearch(
+    max_results=5,
+    topic="general",
+)
+
+result = search_tool.invoke({
+    "query": "What are the latest AI developments?"
+})
+
+print(result)
+```
+Your machine is responsible for below. The actual internet search is initiated from Tavily servers. 
+
+* Running your Python/LangChain code
+* Sending the search query to Tavily
+* Receiving the results
+* Passing those results to your LLM/agent
+
+
+#### Schema definition
+Define complex schema for the tool using pydantic schema definition
+Using args_schema with the schema name will map it to respective pydantic model. 
+book_seats.args suggest the arguments for the tool. 
+We need to make sure tool argument name and type and schema fields name and type should match for this automatic schema mapping. This helps us to apply pydantic specifications to the input arguments and any invalid arguments can be caught by pydantic. 
+
+```
+from pydantic import BaseModel,Field
+from typing import Literal
+
+class SeatBookingInput(BaseModel):
+    movie_title:str = Field(description='Exact Movie Title')
+    seat_count : int = Field(description='Number of seats to book', ge=1, le=10)
+    preferred_row : Literal['front', 'middle', 'back'] = Field(default='middle', description='Preferred seat row')
+
+@tool(args_schema=SeatBookingInput)
+def book_seats(movie_title:str, seat_count:int, preferred_row:str)-> str:
+  """Book Seats for a Movie"""
+  return f"Booked {seats} seats for {movie_title} in row {preferred_row}"
+
+```
+
+#### Reserved parameter names in tool args
+Following arguments are reserved and should not be used as arguments to tool for our use. This can only be used as RunnableConfig and ToolRuntime. config and runtime are not normally passed as ordinary tool input arguments from the model. They are injected by the framework.
+
+* config -	Reserved for passing RunnableConfig to tools internally
+* runtime -	Reserved for ToolRuntime parameter (accessing state, context, store)
+
+#### Binding tools
+Model can be bound with model.bind_tools([book_seats]). This returns a AIMessage with details about the tool call to be made. Example like below.
+
+tool_calls=[{'name': 'check_showtimes', 'args': {'movie_title': 'Interstellar'}, 'id': 'call_FNNMiJFEnFiVDQ7IoIBXZeDU', 'type': 'tool_call'}]
+
+The actual tool call will not happen with model.invoke it just provides details of how to make the tool call if one is needed for the input request. 
+
+#### Runtime
+
+we can pass ToolRuntime to tool arguments and langchain can provide lot of additional information into that argument for the tool to use. This is not visible directly to model as a model arg, but is injected to model by the framework. 
+
+
+| Component | Class / API | Description | Use case |
+|---|---|---|---|
+| **State** | `AgentState` | Short-term memory — mutable data that exists for the current conversation (messages, counters, custom fields) | Access conversation history, track tool call counts |
+| **Context** | `Runtime[Context]` | Immutable configuration passed at invocation time (user IDs, session info) | Personalize responses based on user identity |
+| **Store** | `BaseStore` / `InMemoryStore` | Long-term memory — persistent data that survives across conversations | Save user preferences, maintain knowledge base |
+| **Stream Writer** | `StreamWriter` | Emit real-time updates during tool execution | Show progress for long-running operations |
+| **Execution Info** | `Runtime` / `ExecutionInfo` / thread_id, node_attempt | Identity and retry information for the current execution (thread ID, run ID, attempt number) | Access thread/run IDs, adjust behavior based on retry state, help to identify how many times tool ran |
+| **Server Info** | `ServerRuntime` / runtime metadata | Server-specific metadata when running on LangGraph Server (assistant ID, graph ID, authenticated user) | Access assistant ID, graph ID, or authenticated user info |
+| **Config** | `RunnableConfig` | `RunnableConfig` for the execution | Access callbacks, tags, and metadata |
+| **Tool Call ID** | `ToolCallId` | Unique identifier for the current tool invocation | Correlate tool calls for logs and model invocations |
+
+
+![Tool Runtime diagram.](tool-runtime-state.png "Tool Runtime diagram")
+
+#### Long term memory. 
+
+We can store long term memory using InMemoryStore class
+
+```
+loyalty_store= InMemoryStore()
+
+
+@tool
+def save_favourite_genres(customer_id:str,genre:str,runtime:ToolRuntime) -> str:
+    """Save a customer's facvourite movie genre for future visits"""
+    print('inside save_favourite_genres customer_id '+customer_id)
+    print(runtime)
+    runtime.store.put((customer_id,"preferences"),"favourite_genre",{"value":genre})
+    return f"Got it -- I will remmeber you like {genre} movies"
+
+memory_agent = create_agent(
+    model = model,
+    tools=[save_favourite_genres,recall_favourite_genre],
+    store=loyalty_store  # Attached to the agent, tools can access it using runtime
+)
+```
+The below is how we save to the store.
+```
+runtime.store.put((customer_id,"preferences"),"favourite_genre",{"value":genre})
+
+is equivalent to below for a specific example value
+
+Namespace
+("customer_123", "preferences")
+        │
+        └── favourite_genre
+                │
+                └── {"value": "sci-fi"}
+
+This helps to store data heirarchically. 
+
+customer_123
+├── preferences
+│   ├── favourite_genre
+│   └── favourite_actor
+│
+└── profile
+    ├── name
+    └── language
+```
+
+
+#### Tool Call flow
+
+In a typical LangChain agent workflow, when an agent is configured with tools and the model decides to call a tool, the messages are generally generated in this order:
+
+1. **HumanMessage** — Contains the user's initial question.
+2. **AIMessage** — The model decides whether a tool is needed and, if so, contains the tool call request.
+3. **ToolMessage** — Contains the result returned by the executed tool.
+4. **AIMessage** — The model receives the `ToolMessage` and generates the final response using the tool result.
+
+The final `AIMessage` can sometimes be avoided by using `return_direct=True` on the tool. In that case, after the tool executes, its result is returned directly to the caller instead of sending the tool result back to the model for another response.
+
+```python
+from langchain_core.tools import tool
+
+@tool(return_direct=True)
+def get_weather(city: str):
+    """Return the weather."""
+    return f"It's 75°F in {city}."
+```
+return_direct=True is useful when the tool's result is already the final answer, so you don't need the LLM to interpret, rewrite, or summarize it.
+
 
 
 ## Middleware (callbacks or hooks)
@@ -1717,3 +1878,12 @@ agent = create_agent(
 )
 ```
 Now in your invoke request if you pass any amount $50 or more it will trigger interrupt flow otherwise it will go through normal flow. 
+
+
+
+
+
+
+
+
+
