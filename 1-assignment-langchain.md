@@ -38,3 +38,45 @@ print("id:                       ", response.id)\
 print("tool_calls                ", response.tool_calls)\
 print("usage_metadata                ", response.usage_metadata)\
 print("response_metadata                ", response.response_metadata)\
+
+
+__7.Explain why streaming produces AIMessageChunk objects instead of plain text fragments, and what property of these chunks makes them genuinely different from a string split into pieces.__
+
+Streaming returning AIMessageChunk because each chunk is a partial AIMessage when combined to give the full message. Each AIMessage is not merely a string but can carry structured message information in addition to content. 
+
+__8.What's the difference between .batch() and .batch_as_completed()? Describe a real situation where you would specifically want the second one over the first.__
+.batch() will wait for all the request to be processed and response is generated. .batch_as_completed() will start returning results as soon as its available. This is useful if we want to show results of unrelated questions that are submitted in a batch and want to start showing the response immediately. 
+
+__9.A ToolMessage has both a .content field and an .artifact field. What's the difference, and why would a RAG-style tool specifically want to use .artifact?.__
+.content is visible to the model as an input, while .artifact is not made visible to the model by langchain. it can contain internal application data/information that are not needed for the model to see. A RAG tool wants this to attach a document ID or citation link the UI needs, without bloating what the model has to process.
+
+__10.You're writing a ChatPromptTemplate whose system message needs to include a literal JSON example like {"status": "ok"}. What will go wrong if you paste that in directly, and how do you fix it?__
+ChatPromptTemplate treats {..} as tempalte variable. So if you want to include literal strings in curly braces you have to escape it with another curly brace outside. LangChain tries to interpret the literal { and } in the JSON example as MORE template variables, and fails (INVALID_PROMPT_INPUT}
+
+__11.What does MessagesPlaceholder do, and why can't you achieve the same result with a normal string-based template variable?__
+
+MessagePlaceHolder is useful if you have to insert a list of already-created LangChain messages into a ChatPromptTemplate. A normal variable like ("human", "{history}") cannot do the same because it will treat history as a string text not as a list of messages. 
+```
+history = [
+    HumanMessage(content="My name is John"),
+    AIMessage(content="Nice to meet you, John."),
+    HumanMessage(content="What is my name?")
+]
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant."),
+    MessagesPlaceholder("history"),
+    ("human", "{question}")
+])
+prompt.invoke({
+    "history": history,
+    "question": "What did I tell you?"
+})
+```
+
+
+
+
+
+
+
+
