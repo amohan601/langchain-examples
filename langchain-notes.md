@@ -195,6 +195,11 @@ Final answer:
 Agent: The current weather in Tokyo is 22°C and partly cloudy.
 
 ```
+
+
+
+
+
 ## Agents
 
 Agent = LLM(model)  + Tools + Memory
@@ -503,6 +508,9 @@ structured output response format.
 Structured output exists at TWO levels: raw model (with_structured_output) and agent (response_format on create_agent) — the agent-level version is what the rest of this course actually uses, because it coexists with tools.
 
 We define a  class extended from pydantic Basemodel with the field defining the schema for our response format. The description is given using pydantic Field type. Then invoke the model using model.with_structured_output(BookingRequest) the class name for our schema. 
+
+model.profile["structured_output"] tells us whether a given model supports structured output or not. 
+
 ```
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -593,7 +601,7 @@ You generally cannot use an arbitrary Union of multiple schemas with ProviderStr
 
 
 
-#### Can agent not follow scehma sometimes? 
+#### Can agent not follow schema sometimes? 
 
 Sometimes the schema output can be overriden based on the input request. Example 
 ```
@@ -638,15 +646,59 @@ Is toolmessage? False ---
 Is toolmessage? True --- i am testing validations
 ```
 You can set up behaviour using handle_error in ToolStrategy to decide how to respond to errors 
+
+
 ```
 Error handling strategy for structured output validation failures. Defaults to True.
-True: Catch all errors with default error template
-str: Catch all errors with this custom message
-type[Exception]: Only catch this exception type with default message
-tuple[type[Exception], ...]: Only catch these exception types with default message
-Callable[[Exception], str]: Custom function that returns error message
-False: No retry, let exceptions propagate
+
+True:   Catch all errors with default error template
+str:    Catch all errors with this custom message
+type[Exception]:  Only catch this exception type with default message
+tuple[type[Exception], ...]:   Only catch these exception types with default message
+Callable[[Exception], str]:   Custom function that returns error message
+False:   No retry, let exceptions propagate
 ```
+Custom error message:
+
+```
+ToolStrategy(
+    schema=ProductRating,
+    handle_errors="Please provide a valid rating between 1-5 and include a comment."
+)
+```
+
+Handle multiple errors:
+```
+ToolStrategy(
+    schema=ProductRating,
+    handle_errors=(ValueError, TypeError)  # Retry on ValueError and TypeError
+)
+```
+
+Custom error handling method option:
+```
+def custom_error_handler(error: Exception) -> str:
+    if isinstance(error, StructuredOutputValidationError):
+        return "There was an issue with the format. Try again."
+    elif isinstance(error, MultipleStructuredOutputsError):
+        return "Multiple structured outputs were returned. Pick the most relevant one."
+    else:
+        return f"Error: {str(error)}"
+
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[],
+    response_format=ToolStrategy(
+                        schema=Union[ContactInfo, EventDetails],
+                        handle_errors=custom_error_handler 
+                    )  # Default: handle_errors=True
+)
+```
+
+
+
+
 ## Tools
 <a href="langchain-tools.ipynb" target="_blank">Tools code doc</a>
 
@@ -691,6 +743,12 @@ Using args_schema with the schema name will map it to respective pydantic model.
 book_seats.args suggest the arguments for the tool. 
 We need to make sure tool argument name and type and schema fields name and type should match for this automatic schema mapping. This helps us to apply pydantic specifications to the input arguments and any invalid arguments can be caught by pydantic. 
 
+args_schema = tool input schema.
+
+response_format = agent output schema.
+
+The agent handles the tool-calling loop, but args_schema defines the contract for the tool itself.
+This helps to set constraints to the tool call with the pydantic class. 
 ```
 from pydantic import BaseModel,Field
 from typing import Literal
@@ -808,6 +866,61 @@ def get_weather(city: str):
 ```
 return_direct=True is useful when the tool's result is already the final answer, so you don't need the LLM to interpret, rewrite, or summarize it.
 
+#### Dynamic tool selection 
+Explained in middleware section using wrap style hooks.
+
+#### Headless tools
+Some tools should run where your user’s app runs (typically the browser), not inside the process. Headless tools are tool definitions, which include the name, description, and argument schema, that you register on the server with your agent. The implementation is registered only on the client and executed after a short interrupt/resume handshake.
+This is different from ordinary tools whose function body runs on the server, and from server-side tool use where the model provider executes built-in tools remotely.
+Examples - 
+* Payment
+* Access the clipboard
+* Location
+
+
+### Forgetting issue with agents - InMemorySaver
+We can use InMemorySaver to checkpoint and remember conversation over invocations.
+Use threadid configuration with each invokation and specify checkpointer as InMemorySaver.
+
+```
+from langgraph.checkpoint.memory import InMemorySaver
+checkpointer = InMemorySaver()
+
+cinebot_stateful = create_agent(
+    model="openai:gpt-5-mini",
+    tools=[check_showtimes, book_seats, get_exact_refund_policy],
+    system_prompt="You are CineBot, a friendly cinema booking assistant. Check showtimes before booking.",
+    checkpointer=checkpointer
+)
+config = {"configurable": {"thread_id": 'inmemory-demo'}}
+
+cinebot_stateful.invoke({"messages":[('user','My Name is AJ')]},config=config)
+```
+
+### Long term memory for tools to access - InMemoryStore
+InMemoryStore is to store long term information, it stores in a in memory db only. 
+The store is accessible as ToolRuntime to the tool. It is accessed as runtime.store
+for get and put operations. 
+
+```
+from langgraph.store.memory import InMemoryStore
+
+travel_store = InMemoryStore()
+
+from langchain.tools import ToolRuntime
+@tool
+def save_travel_style(user_id: str, style: str, runtime: ToolRuntime) -> str:
+    """Save a traveler's preferred trip style (e.g. budget, luxury, adventure) for future visits."""
+    runtime.store.put((user_id, "preferences"), "travel_style", {"value": style})
+    return f"Noted -- I'll remember you prefer {style} travel."
+
+@tool
+def recall_travel_style(user_id: str, runtime: ToolRuntime) -> str:
+    """Recall a traveler's preferred trip style, if saved before."""
+    result = runtime.store.get((user_id, "preferences"), "travel_style")
+    return result.value["value"] if result else "No travel style saved yet for this user."
+```
+
 
 
 ## Middleware (callbacks or hooks)
@@ -821,6 +934,7 @@ return_direct=True is useful when the tool's result is already the final answer,
 * middle ware is one way to apply guard rails
 
 ![Middleware diagram.](middleware1.png "Middleware")
+
 Code for this section 
 <a href="langchain-middleware.ipynb" target="_blank">langchain-middleware.ipynb</a>
 * Pre-Built in middleware
@@ -965,7 +1079,10 @@ Also clarify whether "what time" means:
 #### HITL middleware
 * Human-In-The-Loop - HITL Middleware
 It allows us to interrupt and get the user involved before the tool is called. 
+
 <a href="https://reference.langchain.com/python/langchain/agents/middleware/human_in_the_loop/HumanInTheLoopMiddleware">HITL Docs</a>
+
+
 ```
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
@@ -1001,19 +1118,27 @@ result = agent.invoke({"messages" : [
     ("user", "First call the Read email aj123@gmail.com and tell me the subject. Do not call send email until read email is completed. Next, Send an email to my manager on aj1234@gmail.com, asking for a leave, dont include any reason. its for today.")
 ]},config = config)
 ```
+
+
 The HITL middleware is invoked right before the tool is called and it generates an interrupt that we can see in the response AIMessage. 
 
 We can resume the interrupt using below. Note that since continiuty is needed in this conversation to resume after interrupt inmemorycheckpointer is needed. 
+
+
 ```
 resumed_result = agent.invoke(Command(resume={"decisions":[{"type":"approve"}]}),config=config)
 ```
+
+
 In the above example it will first give HumanMessage for our input request. Then it gives 
 AIMessage -> indicating read email tool call is needed. Then it gives ToolMessage for that call. Then it gives AIMessage for send email tool call needed. However this step also includes interrupt since HITL is specified for this tool. Once the above command is given to resume the full response will have ToolMessage for this tool call followed by the final message for send email tool call as AIMessage. 
 
 #### Model Call Limit
 * Model call limit - Limit the number of model calls to prevent excessive costs.
 
-ModelCallLimitMiddleware uses thread_limit which is across all conversations how many invoke(or model call) and run_limit is for a single conversation how many times invoke is allowed 
+ModelCallLimitMiddleware uses thread_limit which is across all conversations how many invoke(or model call) and run_limit is for a single conversation how many times invoke is allowed.
+
+
 ```
 from langchain.agents.middleware import ModelCallLimitMiddleware
 call_limited_agent = create_agent(
@@ -1466,7 +1591,7 @@ tool_calls=[
 ## Custom Middleware
 You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. 
 
-![Middleware diagram.](customer-middleware1.png "Custom Middleware")
+![Middleware diagram.](customer-middleware.png "Custom Middleware")
 
 #### Decorator middleware 
 
@@ -1490,6 +1615,7 @@ When to use decorators:
 * Quick prototyping
 
 
+#### Dynamic tool selection using @wrap_model_call
 Middleware can change the state of an change with the help of these hooks. Example we can change the model dynamically with @wrap_model_call hook where based on custom condition we can pass a different model to the agent state. Example for @wrap_model_call is to set up a advanced model for certain criteria like below. Wrap model call can also help dynamic tool selection based on logic.
 
 ```
@@ -1503,6 +1629,8 @@ def select_tools(
     relevant_tools = select_relevant_tools(request.state, request.runtime)
     return handler(request.override(tools=relevant_tools))
 ```
+
+#### Dynamic model selection using @wrap_model_call
 
 ```
 advanced_model = init_chat_model("anthropic:claude-sonnet-4-6")
@@ -1597,6 +1725,8 @@ agent = create_agent(
 * Unit test middleware independently before integrating
 * Consider execution order - place critical middleware first in the list
 * Use built-in middleware when possible
+
+
 
 
 ## Agent State and Runtime
@@ -1878,12 +2008,4 @@ agent = create_agent(
 )
 ```
 Now in your invoke request if you pass any amount $50 or more it will trigger interrupt flow otherwise it will go through normal flow. 
-
-
-
-
-
-
-
-
 
