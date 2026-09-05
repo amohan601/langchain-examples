@@ -1591,7 +1591,7 @@ tool_calls=[
 ## Custom Middleware
 You can build custom middleware by adding hooks at specific points in the agent execution flow. Hooks are Node style hooks and wrap style hooks. Hooks are extension points in custom middleware that let you intercept, inspect, or modify agent execution at specific stages of the lifecycle. 
 
-![Middleware diagram.](customer-middleware.png "Custom Middleware")
+![Middleware diagram.](custom-middleware.png "Custom Middleware")
 
 #### Decorator middleware 
 
