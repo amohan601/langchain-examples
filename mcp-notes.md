@@ -134,7 +134,7 @@ MCP uses JSON-RPC because MCP needs a standardized, transport-independent RPC me
 
 #### Initialization
 
-##### Structure
+** Structure ** 
 <a href="https://mcp-lifecycle.netlify.app/">mcp lifecycle docs from mayank</a>
 <a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle">mcp lifecycle docs</a>
 
@@ -168,7 +168,7 @@ After this, they are connected for the whole session.
 In this connection is not open, once client send request it forgets it. Server sends back another request (which is a response of request from client) to provide update. 
 
 
-#####  Version negotiation in handshake
+**  Version negotiation in handshake ** 
 
 * client sends it version(latest supported)
 * server sends back its version(latest supported)
@@ -181,7 +181,7 @@ if you want your MCP client to work with an MCP server that was built 2 years ag
 
 If the server supports an older MCP version, the client uses that mutually supported version and only uses features/capabilities that the server actually supports.
 
-##### Capability negotiation in handshake
+**  Capability negotiation in handshake ** 
 Capability negotiation helps to confirm what both sides can do. capabilities are added under "request" or "result" from client and server respectively. 
 
 
@@ -210,4 +210,110 @@ In this phase actual tool call happens with tools/call and passing the arguments
 | **stdio**           | Close `stdin`, wait; send `SIGTERM` if it doesn't exit; use `SIGKILL` as a last resort | Server closes its output stream and exits                       |
 | **Streamable HTTP** | Close the HTTP connection                                                              | Server closes unexpectedly — client should reconnect gracefully |
 
+**<u>Transport layer connection types</u>**
+
+shutdown depends on the type of connection made between client and server. 
+
+**if mcp server is running locally** \
+Stdio process - client connects with server running in same machine through stdio process. Example terminal running python program where terminal is client and poython program is server they talk trhough stdio to take input and get output. If they are running on same machine just close the stdio connection is enough to shutdown. Usually in this case server is running in local machine where Host and Client exist. 
+* fast connection - since both running on same system 
+* secure - since both running on same system 
+* simple
+In STDIO, No JSON-RPC message is exchanged during shutdown at all. The entire responsibility shifts to the transport layer.
+
+**if mcp server is running remote** \
+Streamable http - client talks to server over http protocol using post request. client can close connection. The url is ending in /mcp. 
+see this setup has local and remote connections. \
+![MCP-Server-Type diagram.](mcp-server-type.png "MCP server type")
+
+**How to create MCP Server and run it locally**
+
+MCP servers can be created and run in local. 
+```
+uv init mcp-warmup
+uv add fastmcp
+uv run python mcp_with_primitives.py
+```
+mcp_with_primitives.py is below
+```
+# Assemble the complete, final server and write it to disk
+
+from fastmcp import FastMCP
+
+mcp = FastMCP("Warm-Up Server")
+
+@mcp.tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! Welcome to MCP."
+
+@mcp.resource("file://server-notes")
+def server_notes() -> str:
+    """Read-only notes about this server, straight from a local file."""
+    with open("server-notes.txt") as f:
+        return f.read()
+
+@mcp.tool
+def add(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+@mcp.prompt
+def structured_escalation(issue_summary: str, what_was_tried: str, customer_sentiment: str) -> str:
+    """Guides the AI to log a customer escalation with every required field, in order."""
+    return f"""Log this customer escalation with the following structure:
+Issue Summary: {issue_summary}
+What Was Already Tried: {what_was_tried}
+Customer Sentiment: {customer_sentiment}
+Recommended Next Action: [determine this from the details above]
+"""
+
+if __name__ == "__main__":
+    mcp.run()
+
+**accessing through inspector**
+```
+You can access this  through a interactive inspector UI provided by an external open-source package published by Anthropic called @modelcontextprotocol/inspector. 
+
+```
+npx -y @modelcontextprotocol/inspector uv run python mcp_with_primitives.py
+opened as
+http://127.0.0.1:6274/?MCP_INSPECTOR_API_TOKEN=405f2544b819e21dac9800e0047057ffeed0401e737dc923fe748b6af9185512
+
+```
+
+When you run npx @modelcontextprotocol/inspector, npm downloads a single, pre-bundled package from the global npm registry. Inside this package is a Vite + React + Mantine single-page web application. The Local Proxy Server: When you run the npx command, it spins up a tiny local Node.js backend proxy server on your machine (typically listening on http://localhost:6274). [1] (https://mcp.so/servers/inspector)
+
+**using mcpjam to test your local mcpserver**
+
+You can start up mcpjam server in your local which can provide a UI using which you can test other mcp servers like the one we set up in our local. A different port to ensure it does not compete for the same 6274 port. 
+```
+npx @mcpjam/inspector@latest --port 4000
+```
+
+**connect as STDIO to your local mcp server**
+
+In this case you dont start your local mcp server example. You invoke it through MCPJAM as a subprocess. 
+Now you can connect to the custom fastmcp server you created using the MCPJAM tool 
+by adding the server through Add Server option. Choose STDIO for MCPJAM to start your
+FASTMCP server as a seperate subprocess. You dont have to run fastmcp locally while running mcpjam. MCPJam will connect to your FASTMCP and invoke it as if its a child process or a simple python file. 
+
+```
+uv --directory <folder where python file is present> run python mcp_with_primitives.py
+```
+
+![MCP-JAM-Connect local tools diagram.](mcp-mcpjam-localtools.png "MCP JAM local server tools")
+
+![MCP-JAM-Connect to local diagram.](mcp-mcpjam-localserver.png "MCP JAM connect STDIO to local server")
+
+**connect as Streamable HTTP to your local mcp server**
+
+In this case you need to start your mcp server example as HTTP process so that it has a localhost HTTP url with which it can be access.
+Below command is run in the folder where your mcp server code is present. It will give you a URL like   http://127.0.0.1:8000/mcp   
+```
+uv run fastmcp run mcp_with_primitives.py --transport http --port 8000
+```
+Using the above URL you can connect from MCPJAM now. 
+
+![MCP Streamable HTTP connected.](mcp-http-connected.png "MCP Streamable HTTP connected")
 
