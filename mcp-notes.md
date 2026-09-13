@@ -300,6 +300,7 @@ FASTMCP server as a seperate subprocess. You dont have to run fastmcp locally wh
 
 ```
 uv --directory <folder where python file is present> run python mcp_with_primitives.py
+
 ```
 
 ![MCP-JAM-Connect local tools diagram.](mcp-mcpjam-localtools.png "MCP JAM local server tools")
@@ -312,8 +313,33 @@ In this case you need to start your mcp server example as HTTP process so that i
 Below command is run in the folder where your mcp server code is present. It will give you a URL like   http://127.0.0.1:8000/mcp   
 ```
 uv run fastmcp run mcp_with_primitives.py --transport http --port 8000
+
 ```
 Using the above URL you can connect from MCPJAM now. 
 
 ![MCP Streamable HTTP connected.](mcp-http-connected.png "MCP Streamable HTTP connected")
 
+**mcp libraries**
+**mcp library**\
+* from official Claude/Anthropic
+* In this version using mcp library you have to write more low level code where you have to define on your own list_tools and call_tools method and define your tools in there manually. 
+<a href="https://github.com/mayank953/Live-Class-2026/blob/main/Complete%20MCP/first-mcp-server/recipebox_lowlevel.py">Low level code for recipebox example</a>
+```
+pip install mcp
+```
+**fastmcp library** 
+* with this library you just define your tools alone using @mcp.tool decorator. You dont define list or call tools method yourself. 
+```
+pip install fastmcp
+```
+Both options give you MCP Inspector. 
+Start code in mcp inspector using below
+```
+CLIENT_PORT=6280 npx @modelcontextprotocol/inspector python3 mcp_with_primitives.py
+```
+**Adding MCPServer in Claude desktop**
+
+To add this MCP server as a connector to claude desktop run the below comman.d
+```
+uv run  fastmcp install claude-desktop recipebox_fastmcp.py
+```
