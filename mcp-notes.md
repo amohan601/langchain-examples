@@ -121,6 +121,7 @@ where connetion is closed
 MCP uses JSON-RPC 2.0 for the message format and RPC semantics, while HTTP (specifically Streamable HTTP) can be one of the transports that carries those messages.
 
 MCP needs standardized concepts such as:
+
 | Need                                  | JSON-RPC provides                         |
 | ------------------------------------- | ----------------------------------------- |
 | Request → response matching           | `id`                                      |
@@ -171,7 +172,7 @@ After this, they are connected for the whole session.
 In this connection is not open, once client send request it forgets it. Server sends back another request (which is a response of request from client) to provide update. 
 
 
-**  Version negotiation in handshake ** 
+** Version negotiation in handshake** 
 
 * client sends it version(latest supported)
 * server sends back its version(latest supported)
@@ -184,7 +185,8 @@ if you want your MCP client to work with an MCP server that was built 2 years ag
 
 If the server supports an older MCP version, the client uses that mutually supported version and only uses features/capabilities that the server actually supports.
 
-**  Capability negotiation in handshake ** 
+**Capability negotiation in handshake** 
+
 Capability negotiation helps to confirm what both sides can do. capabilities are added under "request" or "result" from client and server respectively. 
 
 
