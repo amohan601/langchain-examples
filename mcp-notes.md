@@ -79,20 +79,23 @@ It explains all things a server can offer.
 ### Functions of the primitive
 
 * MCP tools primitive has the ability to list and call tools. This helps MCP host to know what tools are available. 
+
 | **MCP Operation** | **Purpose**              | **Returns**                            |
 | ----------------- | ------------------------ | -------------------------------------- |
 | **`tools/list`**  | Discover available tools | Array of tool definitions with schemas |
 | **`tools/call`**  | Execute a specific tool  | Tool execution result                  |
 
 * Resource provide static data. 
-| **Method**                     | **Purpose**                     | **Returns**                            |
-| ------------------------------ | ------------------------------- | -------------------------------------- |
+
+| **Method**         | **Purpose**                | **Returns**                           |
+| ------------------ | -------------------------- | ------------------------------------- |
 | **`resources/list`**           | List available direct resources | Array of resource descriptors          |
 | **`resources/templates/list`** | Discover resource templates     | Array of resource template definitions |
 | **`resources/read`**           | Retrieve resource contents      | Resource data with metadata            |
 | **`subscriptions/listen`**     | Monitor resource changes        | Stream of update notifications         |
 
 * Prompts has list and get. 
+
 | **Method**         | **Purpose**                | **Returns**                           |
 | ------------------ | -------------------------- | ------------------------------------- |
 | **`prompts/list`** | Discover available prompts | Array of prompt descriptors           |
@@ -320,7 +323,7 @@ Using the above URL you can connect from MCPJAM now.
 ![MCP Streamable HTTP connected.](mcp-http-connected.png "MCP Streamable HTTP connected")
 
 **mcp libraries**
-**mcp library**\
+**mcp library**
 * from official Claude/Anthropic
 * In this version using mcp library you have to write more low level code where you have to define on your own list_tools and call_tools method and define your tools in there manually. 
 <a href="https://github.com/mayank953/Live-Class-2026/blob/main/Complete%20MCP/first-mcp-server/recipebox_lowlevel.py">Low level code for recipebox example</a>
@@ -343,3 +346,7 @@ To add this MCP server as a connector to claude desktop run the below comman.d
 ```
 uv run  fastmcp install claude-desktop recipebox_fastmcp.py
 ```
+You can see this connector when you open claude desktop. If you want to remove it, 
+go to terminal and run nano ~/Library/Application\ Support/Claude/claude_desktop_config.json
+Edit the file and remove the specific server added under mcpservers file. 
+CNTRL + 0 and CNTRL+X to save and exit. 
