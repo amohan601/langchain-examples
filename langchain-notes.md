@@ -546,7 +546,7 @@ customer_name='Aisha' movie_title='Oppenheimer' action='cancel' ticket_count=1
  --> action type : <class 'str'>, value : cancel
 ---
 ```
-
+A regular model.invoke returns an AIMessage response, which contains content you can extract. With a structured output response, we get the structured schema object directly. 
 ### Tool Strategy & Provider Strategy
 
 structured_output_schema  generally defines the schema you want the model to produce, while ProviderStrategy / ToolStrategy describe how LangChain obtains that structured output. When using model.structured_output_schema to generate schema based response the schema generation depends on the provider.  Some models or model providers do/do not support structured output response. 
